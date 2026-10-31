@@ -14,47 +14,54 @@ public static class AutoSceneBuilder
     private const string FontAssetPath = "Assets/Fonts/Maplestory Bold SDF.asset";
     private const string FamilyTexturesDir = "Assets/Textures/Family";
     private const string BusFacesDir = "Assets/Textures/BusFaces";
+    private const string UITexturesDir = "Assets/Textures/UI";
+    private const string DemoScenePath = "Assets/SimplePoly City - Low Poly Assets/Demo/SimplePoly City - Low Poly Assets_Demo Scene.unity";
+    private const string TargetScenePath = "Assets/Scenes/SampleScene.unity";
 
-    [MenuItem("CocoNara/1. 게임 씬 완전 자동 구축 (Build Complete Scene)", false, 1)]
+    [MenuItem("CocoNara/1. ★ [최고 퀄리티] 실제 3D 도시 오픈월드 씬 완전 구축 (Build High-End City)", false, 1)]
     public static void BuildCompleteGameScene()
     {
-        Debug.Log("<color=#00FF88>[CocoNara] 씬 자동 구축을 시작합니다...</color>");
+        Debug.Log("<color=#00FF88>[CocoNara] 최고 퀄리티 3D 오픈월드 도시 씬 구축을 시작합니다...</color>");
 
-        // 0. URP 핑크 머티리얼 일괄 변환 및 해결
-        ConvertAllLegacyMaterialsToURP();
-
-        // 1. 필요한 텍스처 및 폰트 에셋 준비
+        // 1. 필요한 텍스처(표정, UI, 가족 뱃지) 및 TMP 폰트 준비
         EnsureDirectories();
         GenerateBusFaceTextures();
         EnsureFamilyMemberTextures();
         TMP_FontAsset fontAsset = GetOrCreateTMPFontAsset();
 
-        // 2. 씬 기본 환경 초기화
-        GameObject worldRoot = GetOrCreateRoot("WorldRoot");
-        SetupLightingAndSky();
+        // 2. 핑크색 머티리얼 URP Lit으로 일괄 변환 (모든 애셋 정상 렌더링)
+        ConvertAllLegacyMaterialsToURP();
 
-        // 3. 도로 및 맵 지형 구축
-        SetupRoadNetworkAndGround(worldRoot);
+        // 3. 실제 정밀 모델링된 3D 도시 맵(SimplePoly City Demo)을 SampleScene으로 로드/동기화
+        EnsureCityBaseScene();
 
-        // 4. 12개 주요 랜드마크 구축
-        Dictionary<string, Landmark> landmarks = SetupAllLandmarks(worldRoot, fontAsset);
+        // 4. 기존 임시 오브젝트 정리
+        CleanExistingGameplayObjects();
 
-        // 5. 꼬마버스 생성 및 세팅 (아이파크캐슬 출발점)
-        BusController bus = SetupBus(worldRoot, landmarks["아이파크캐슬"].transform.position + Vector3.forward * 4f);
+        // 5. 게임 시스템 루트 생성
+        GameObject gameRoot = GetOrCreateRoot("CocoNara_GameSystems");
 
-        // 6. 메인 카메라 세팅
-        SetupCamera(bus.transform);
+        // 6. 12개 실제 도시 랜드마크 & 3D 테마 간판 배치
+        Dictionary<string, Landmark> landmarks = SetupHighQualityLandmarks(gameRoot.transform, fontAsset);
 
-        // 7. 가족 승객 2.5D 빌보드 생성 및 거점 배치
-        SetupFamilyPassengers(worldRoot, landmarks, fontAsset);
+        // 7. 꼬마버스 스폰 (도로 한가운데 탁 트인 직선 도로 위 완벽 배치)
+        Vector3 busSpawnRoadPos = new Vector3(60f, 0.45f, 40f); // 2차선 아스팔트 대로 위
+        Quaternion busSpawnRot = Quaternion.Euler(0f, 90f, 0f); // 앞쪽 시원하게 뚫린 도로 방향
+        BusController bus = SetupHighQualityBus(gameRoot.transform, busSpawnRoadPos, busSpawnRot);
 
-        // 8. 모바일 조작 및 미니게임 UI 캔버스 구축
-        SetupUI(bus, fontAsset);
+        // 8. 시야 방해 없는 스마트 쿼터뷰 추적 카메라 세팅
+        SetupSmartCamera(bus.transform);
 
-        // 9. 매니저 오브젝트 세팅
-        SetupManagers(worldRoot);
+        // 9. 2.5D 가족 승객 정류장 인도 위 배치
+        SetupFamilyPassengers(gameRoot.transform, landmarks, fontAsset);
 
-        // 10. New Input System 모듈 호환성 검증 및 교체
+        // 10. 상용 게임급 갤럭시 탭 S9 울트라 모바일 UI 구축
+        SetupCommercialGradeUI(bus, fontAsset);
+
+        // 11. 승객 & 미션 매니저 세팅
+        SetupManagers(gameRoot.transform);
+
+        // 12. New Input System 모듈 완벽 호환 보장
         FixEventSystemInputModule();
 
         // 씬 저장
@@ -62,10 +69,842 @@ public static class AutoSceneBuilder
         EditorSceneManager.SaveScene(EditorSceneManager.GetActiveScene());
         AssetDatabase.SaveAssets();
 
-        Debug.Log("<color=#00FF88>[CocoNara] 🎉 게임 씬이 성공적으로 자동 구축되었습니다! Play 버튼을 눌러 테스트해보세요.</color>");
+        Debug.Log("<color=#00FF88>[CocoNara] 🎉 3D 실제 도시 기반 최고 퀄리티 게임 씬이 성공적으로 구축되었습니다!</color>");
         if (!Application.isBatchMode)
         {
-            EditorUtility.DisplayDialog("CocoNaraBusStory", "🎉 코코나라 꼬마버스 게임 씬이 성공적으로 구축되었습니다!\n\n1. 핑크색 머티리얼이 URP Lit 셰이더로 일괄 변환되었습니다.\n2. EventSystem이 New Input System 전용 모듈로 자동 교체되었습니다.\n3. 12개 랜드마크, 가족 승객, 2.5D 표정 버스, 모바일 온스크린 컨트롤러, 미니게임 팝업이 모두 연결되었습니다.", "확인");
+            EditorUtility.DisplayDialog("CocoNaraBusStory", "🎉 코코나라 꼬마버스 고퀄리티 오픈월드 씬이 구축되었습니다!\n\n1. 실제 3D 저폴리 도시 도로/건물/가로등/나무가 적용되었습니다.\n2. 버스가 건물 뒤가 아닌 탁 트인 대로 한가운데 도로 위에서 출발합니다.\n3. 머리 위 3D 나침반 화살표가 목적지를 안내합니다.\n4. 상용 키즈 게임급 둥근 UI와 빵빵 경적이 적용되었습니다.\n\n▶ Play 버튼을 눌러 테스트해보세요!", "확인");
+        }
+    }
+
+    private static void EnsureDirectories()
+    {
+        if (!Directory.Exists(BusFacesDir)) Directory.CreateDirectory(BusFacesDir);
+        if (!Directory.Exists(FamilyTexturesDir)) Directory.CreateDirectory(FamilyTexturesDir);
+        if (!Directory.Exists(UITexturesDir)) Directory.CreateDirectory(UITexturesDir);
+        AssetDatabase.Refresh();
+    }
+
+    private static void EnsureCityBaseScene()
+    {
+        if (File.Exists(DemoScenePath))
+        {
+            // DemoScene을 SampleScene으로 복사하여 완벽한 도시 환경 확보
+            string currentScenePath = EditorSceneManager.GetActiveScene().path;
+            if (currentScenePath != DemoScenePath && currentScenePath != TargetScenePath)
+            {
+                File.Copy(DemoScenePath, TargetScenePath, true);
+                AssetDatabase.ImportAsset(TargetScenePath);
+                EditorSceneManager.OpenScene(TargetScenePath);
+            }
+        }
+    }
+
+    private static void CleanExistingGameplayObjects()
+    {
+        // 이전의 어설픈 큐브 기반 오브젝트들 제거
+        string[] oldNames = { "WorldRoot", "CocoNara_GameSystems", "GameCanvas", "Main Camera (Old)" };
+        foreach (var name in oldNames)
+        {
+            GameObject obj = GameObject.Find(name);
+            if (obj != null)
+            {
+                UnityEngine.Object.DestroyImmediate(obj);
+            }
+        }
+
+        // 데모 씬의 기본 고정 카메라는 우리 스마트 카메라로 대체
+        Camera[] cams = UnityEngine.Object.FindObjectsByType<Camera>(FindObjectsSortMode.None);
+        foreach (var c in cams)
+        {
+            if (c.gameObject.name == "Main Camera" && c.GetComponent<SmoothCameraFollow>() == null)
+            {
+                UnityEngine.Object.DestroyImmediate(c.gameObject);
+            }
+        }
+    }
+
+    private static GameObject GetOrCreateRoot(string name)
+    {
+        GameObject obj = GameObject.Find(name);
+        if (obj == null)
+        {
+            obj = new GameObject(name);
+        }
+        return obj;
+    }
+
+    #region 꼬마버스 세팅 (실제 분리 휠 3D 모델 & 2.5D 표정 & 라이트)
+
+    private static BusController SetupHighQualityBus(Transform parent, Vector3 spawnPos, Quaternion spawnRot)
+    {
+        // 분리형 바퀴 버스 프리팹 사용
+        string busPrefabPath = "Assets/SimplePoly City - Low Poly Assets/Prefab/Vehicles/Vehicle with Separated Wheels/Vehicle_Bus_color01_separate.prefab";
+        GameObject busPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(busPrefabPath);
+
+        GameObject busObj = null;
+        if (busPrefab != null)
+        {
+            busObj = (GameObject)PrefabUtility.InstantiatePrefab(busPrefab, parent);
+        }
+        else
+        {
+            busObj = new GameObject("CoCoLittleBus");
+            busObj.transform.SetParent(parent);
+        }
+
+        busObj.name = "CoCoLittleBus";
+        busObj.transform.position = spawnPos;
+        busObj.transform.rotation = spawnRot;
+
+        // 1. Rigidbody 세팅 (낮은 무게중심, 전복 방지, 스무스 아케이드)
+        Rigidbody rb = busObj.GetComponent<Rigidbody>() ?? busObj.AddComponent<Rigidbody>();
+        rb.mass = 1200f;
+        rb.linearDamping = 0.4f;
+        rb.angularDamping = 1.0f;
+        rb.collisionDetectionMode = CollisionDetectionMode.Continuous;
+        rb.constraints = RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationZ;
+        rb.centerOfMass = new Vector3(0f, -0.7f, 0f);
+
+        // 2. BoxCollider 세팅 (턱 걸림 방지 부드러운 하단)
+        BoxCollider boxCol = busObj.GetComponent<BoxCollider>() ?? busObj.AddComponent<BoxCollider>();
+        boxCol.size = new Vector3(2.6f, 2.8f, 8.2f);
+        boxCol.center = new Vector3(0f, 1.55f, 0f);
+
+        // 턱에 걸리지 않는 무마찰 물리 재질
+        PhysicMaterial smoothMat = new PhysicMaterial("BusFrictionless")
+        {
+            dynamicFriction = 0.05f,
+            staticFriction = 0.05f,
+            frictionCombine = PhysicMaterialCombine.Minimum,
+            bounciness = 0f
+        };
+        boxCol.material = smoothMat;
+
+        // 3. BusController 컴포넌트 세팅
+        BusController busController = busObj.GetComponent<BusController>() ?? busObj.AddComponent<BusController>();
+        busController.maxForwardSpeed = 22f;
+        busController.maxReverseSpeed = 10f;
+        busController.acceleration = 22f;
+        busController.deceleration = 20f;
+        busController.steerSpeed = 115f;
+
+        // 바퀴 연결
+        busController.rotatingWheels.Clear();
+        busController.steeringFrontWheels.Clear();
+
+        Transform wheelRR = busObj.transform.Find("Wheel_RR");
+        Transform wheelRL = busObj.transform.Find("Wheel_RL");
+        Transform wheelFR = busObj.transform.Find("Wheel_FR");
+        Transform wheelFL = busObj.transform.Find("Wheel_FL");
+
+        if (wheelRR != null) busController.rotatingWheels.Add(wheelRR);
+        if (wheelRL != null) busController.rotatingWheels.Add(wheelRL);
+        if (wheelFR != null) { busController.rotatingWheels.Add(wheelFR); busController.steeringFrontWheels.Add(wheelFR); }
+        if (wheelFL != null) { busController.rotatingWheels.Add(wheelFL); busController.steeringFrontWheels.Add(wheelFL); }
+
+        // 4. 전면 2.5D 표정 스티커 부착 (앞유리 위)
+        Transform existingFace = busObj.transform.Find("BusFrontFace");
+        if (existingFace != null) UnityEngine.Object.DestroyImmediate(existingFace.gameObject);
+
+        GameObject faceObj = GameObject.CreatePrimitive(PrimitiveType.Quad);
+        faceObj.name = "BusFrontFace";
+        faceObj.transform.SetParent(busObj.transform);
+        faceObj.transform.localPosition = new Vector3(0f, 2.05f, 4.35f);
+        faceObj.transform.localRotation = Quaternion.identity;
+        faceObj.transform.localScale = new Vector3(2.1f, 1.35f, 1f);
+        UnityEngine.Object.DestroyImmediate(faceObj.GetComponent<Collider>());
+
+        Material faceMat = new Material(Shader.Find("Universal Render Pipeline/Unlit") ?? Shader.Find("Sprites/Default"));
+        Texture2D normalTex = AssetDatabase.LoadAssetAtPath<Texture2D>(Path.Combine(BusFacesDir, "BusFace_Normal.png"));
+        Texture2D winkTex = AssetDatabase.LoadAssetAtPath<Texture2D>(Path.Combine(BusFacesDir, "BusFace_Wink.png"));
+        Texture2D chargingTex = AssetDatabase.LoadAssetAtPath<Texture2D>(Path.Combine(BusFacesDir, "BusFace_Charging.png"));
+
+        faceMat.mainTexture = normalTex;
+        faceObj.GetComponent<MeshRenderer>().sharedMaterial = faceMat;
+
+        busController.faceRenderer = faceObj.GetComponent<MeshRenderer>();
+        busController.normalFaceTexture = normalTex;
+        busController.winkFaceTexture = winkTex;
+        busController.happyChargingFaceTexture = chargingTex;
+
+        // 5. 전조등 (밤길이나 터널에서도 밝게 비추는 따뜻한 헤드라이트 2구)
+        CreateHeadlight(busObj.transform, new Vector3(-0.95f, 0.95f, 4.25f));
+        CreateHeadlight(busObj.transform, new Vector3(0.95f, 0.95f, 4.25f));
+
+        // 6. 3D 내비게이션 화살표 부착 (아이들이 길을 잃지 않도록 머리 위에서 목적지를 가리킴)
+        Create3DNavigationPointer(busObj.transform);
+
+        return busController;
+    }
+
+    private static void CreateHeadlight(Transform parent, Vector3 localPos)
+    {
+        GameObject lightObj = new GameObject("Headlight");
+        lightObj.transform.SetParent(parent);
+        lightObj.transform.localPosition = localPos;
+        lightObj.transform.localRotation = Quaternion.Euler(10f, 0f, 0f);
+
+        Light light = lightObj.AddComponent<Light>();
+        light.type = LightType.Spot;
+        light.range = 28f;
+        light.spotAngle = 55f;
+        light.intensity = 2.5f;
+        light.color = new Color(1f, 0.95f, 0.75f);
+    }
+
+    private static void Create3DNavigationPointer(Transform busTransform)
+    {
+        GameObject pointerRoot = new GameObject("NavigationPointer");
+        pointerRoot.transform.SetParent(busTransform);
+        pointerRoot.transform.localPosition = new Vector3(0f, 4.3f, 0f);
+
+        DestinationPointer dp = pointerRoot.AddComponent<DestinationPointer>();
+
+        // 황금빛 3D 화살표 모델
+        GameObject arrowObj = new GameObject("ArrowVisual");
+        arrowObj.transform.SetParent(pointerRoot.transform);
+        arrowObj.transform.localPosition = Vector3.zero;
+
+        // 화살촉 (콘/피라미드)
+        GameObject cone = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+        cone.name = "ArrowShaft";
+        cone.transform.SetParent(arrowObj.transform);
+        cone.transform.localScale = new Vector3(0.5f, 1.2f, 0.5f);
+        cone.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+        cone.transform.localPosition = new Vector3(0f, 0f, -0.4f);
+
+        Material arrowMat = GetOrCreateMaterial("Mat_NavArrow_Gold", new Color(1f, 0.85f, 0.15f));
+        cone.GetComponent<MeshRenderer>().sharedMaterial = arrowMat;
+        UnityEngine.Object.DestroyImmediate(cone.GetComponent<Collider>());
+
+        GameObject head = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        head.name = "ArrowHead";
+        head.transform.SetParent(arrowObj.transform);
+        head.transform.localScale = new Vector3(1.1f, 0.35f, 1.1f);
+        head.transform.localRotation = Quaternion.Euler(0f, 45f, 0f);
+        head.transform.localPosition = new Vector3(0f, 0f, 0.8f);
+        head.GetComponent<MeshRenderer>().sharedMaterial = arrowMat;
+        UnityEngine.Object.DestroyImmediate(head.GetComponent<Collider>());
+
+        dp.arrowVisual = arrowObj.transform;
+    }
+
+    #endregion
+
+    #region 스마트 쿼터뷰 카메라
+
+    private static void SetupSmartCamera(Transform busTarget)
+    {
+        Camera mainCam = Camera.main;
+        if (mainCam == null)
+        {
+            GameObject camObj = new GameObject("Main Camera");
+            mainCam = camObj.AddComponent<Camera>();
+            camObj.tag = "MainCamera";
+        }
+
+        SmoothCameraFollow follow = mainCam.GetComponent<SmoothCameraFollow>() ?? mainCam.gameObject.AddComponent<SmoothCameraFollow>();
+        follow.target = busTarget;
+        follow.offset = new Vector3(0f, 11f, -15.5f);
+        follow.lookAheadDistance = 4.5f;
+        follow.SnapToTarget();
+    }
+
+    #endregion
+
+    #region 12개 실제 도시 랜드마크 구축
+
+    private static Dictionary<string, Landmark> SetupHighQualityLandmarks(Transform parent, TMP_FontAsset fontAsset)
+    {
+        GameObject lmRoot = new GameObject("Landmarks");
+        lmRoot.transform.SetParent(parent);
+
+        Dictionary<string, Landmark> dict = new Dictionary<string, Landmark>();
+
+        // 실제 3D 도시의 주요 빌딩과 명소 좌표 매핑 (도로와 인도가 완벽히 이어지는 위치)
+        dict["아이파크캐슬"] = CreateThemeLandmark(lmRoot.transform, "아이파크캐슬", "우리집 차고지 🏠", new Vector3(60f, 0f, 22f), new Color(0.95f, 0.45f, 0.2f), fontAsset, false);
+        dict["코코어린이집"] = CreateThemeLandmark(lmRoot.transform, "코코어린이집", "태율이 어린이집 🍼", new Vector3(100f, 0f, 60f), new Color(1f, 0.72f, 0.15f), fontAsset, false);
+        dict["나라유치원"]   = CreateThemeLandmark(lmRoot.transform, "나라유치원", "선율이 유치원 🎒", new Vector3(20f, 0f, 60f), new Color(0.35f, 0.75f, 1f), fontAsset, false);
+        dict["글빛공원"]     = CreateThemeLandmark(lmRoot.transform, "글빛공원", "풍차와 벤치 공원 🌳", new Vector3(60f, 0f, 100f), new Color(0.3f, 0.85f, 0.4f), fontAsset, false);
+        dict["하남 스타필드"] = CreateThemeLandmark(lmRoot.transform, "하남 스타필드", "대형 쇼핑몰 🛍️", new Vector3(120f, 0f, 120f), new Color(0.88f, 0.28f, 0.55f), fontAsset, false);
+        dict["전기차 충전소"] = CreateThemeLandmark(lmRoot.transform, "전기차 충전소", "친환경 급속 충전 ⚡", new Vector3(140f, 0f, 40f), new Color(0.15f, 0.85f, 0.85f), fontAsset, true);
+        dict["왕십리 삼성아파트"] = CreateThemeLandmark(lmRoot.transform, "왕십리 삼성아파트", "친할머니댁 👵👴", new Vector3(20f, 0f, 120f), new Color(0.55f, 0.42f, 0.88f), fontAsset, false);
+        dict["하남 풍산 아이파크"] = CreateThemeLandmark(lmRoot.transform, "하남 풍산 아이파크", "외할머니댁 👵👴", new Vector3(160f, 0f, 80f), new Color(0.95f, 0.55f, 0.65f), fontAsset, false);
+        dict["에버랜드"]     = CreateThemeLandmark(lmRoot.transform, "에버랜드", "환상의 놀이공원 🎡", new Vector3(180f, 0f, 160f), new Color(0.98f, 0.35f, 0.22f), fontAsset, false);
+        dict["롯데월드"]     = CreateThemeLandmark(lmRoot.transform, "롯데월드", "모험과 신비의 나라 🎠", new Vector3(0f, 0f, 160f), new Color(0.35f, 0.55f, 0.95f), fontAsset, false);
+        dict["인천공항"]     = CreateThemeLandmark(lmRoot.transform, "인천공항", "국제선 공항 🛫", new Vector3(180f, 0f, 20f), new Color(0.25f, 0.65f, 0.95f), fontAsset, false);
+        dict["김포공항"]     = CreateThemeLandmark(lmRoot.transform, "김포공항", "국내선 공항 ✈️", new Vector3(0f, 0f, 20f), new Color(0.4f, 0.7f, 0.9f), fontAsset, false);
+
+        // 인천공항 상공 선회 비행기 연출
+        SetupAirportAirplane(dict["인천공항"].transform);
+
+        return dict;
+    }
+
+    private static Landmark CreateThemeLandmark(Transform parent, string title, string subtitle, Vector3 pos, Color themeColor, TMP_FontAsset fontAsset, bool isCharging)
+    {
+        GameObject lmObj = new GameObject($"Landmark_{title}");
+        lmObj.transform.SetParent(parent);
+        lmObj.transform.position = pos;
+
+        Landmark landmark = lmObj.AddComponent<Landmark>();
+        landmark.landmarkName = title;
+        landmark.subtitle = subtitle;
+        landmark.isEVChargingStation = isCharging;
+
+        // 도착 트리거
+        SphereCollider trigger = lmObj.AddComponent<SphereCollider>();
+        trigger.isTrigger = true;
+        trigger.radius = 9.0f;
+
+        // 3D 테크니컬 테마 간판 루트 (지상 7m 상공에 플로팅)
+        GameObject signRoot = new GameObject("SignRoot");
+        signRoot.transform.SetParent(lmObj.transform);
+        signRoot.transform.localPosition = new Vector3(0f, 7.2f, 0f);
+        landmark.signRoot = signRoot.transform;
+
+        // 간판 프레임 (골드 테두리 + 테마 컬러 보드)
+        GameObject boardObj = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        boardObj.name = "ThemeSignBoard";
+        boardObj.transform.SetParent(signRoot.transform);
+        boardObj.transform.localPosition = Vector3.zero;
+        boardObj.transform.localScale = new Vector3(8.5f, 2.5f, 0.4f);
+        boardObj.GetComponent<MeshRenderer>().sharedMaterial = GetOrCreateMaterial($"Mat_Theme_{title}", themeColor);
+        UnityEngine.Object.DestroyImmediate(boardObj.GetComponent<Collider>());
+
+        // 기둥 2개
+        CreateSignPillar(signRoot.transform, new Vector3(-3.8f, -3.5f, 0f));
+        CreateSignPillar(signRoot.transform, new Vector3(3.8f, -3.5f, 0f));
+
+        // 메인 타이틀 (MapleStory Bold, 선명한 흰색 볼드 텍스트)
+        GameObject titleObj = new GameObject("TitleTMP");
+        titleObj.transform.SetParent(signRoot.transform);
+        titleObj.transform.localPosition = new Vector3(0f, 0.38f, -0.25f);
+        TextMeshPro titleTMP = titleObj.AddComponent<TextMeshPro>();
+        titleTMP.text = title;
+        titleTMP.fontSize = 7.5f;
+        titleTMP.color = Color.white;
+        titleTMP.alignment = TextAlignmentOptions.Center;
+        titleTMP.fontStyle = FontStyles.Bold;
+        if (fontAsset != null) titleTMP.font = fontAsset;
+        landmark.signTitleTMP = titleTMP;
+
+        // 서브타이틀
+        GameObject subObj = new GameObject("SubtitleTMP");
+        subObj.transform.SetParent(signRoot.transform);
+        subObj.transform.localPosition = new Vector3(0f, -0.48f, -0.25f);
+        TextMeshPro subTMP = subObj.AddComponent<TextMeshPro>();
+        subTMP.text = subtitle;
+        subTMP.fontSize = 4.8f;
+        subTMP.color = new Color(1f, 0.95f, 0.55f);
+        subTMP.alignment = TextAlignmentOptions.Center;
+        if (fontAsset != null) subTMP.font = fontAsset;
+        landmark.signSubtitleTMP = subTMP;
+
+        // 도착 축하 파티클
+        GameObject particleObj = new GameObject("ArrivalParticle");
+        particleObj.transform.SetParent(lmObj.transform);
+        particleObj.transform.localPosition = new Vector3(0f, 1.2f, 0f);
+        ParticleSystem ps = particleObj.AddComponent<ParticleSystem>();
+        var main = ps.main;
+        main.playOnAwake = false;
+        main.loop = false;
+        main.startSize = 0.55f;
+        main.startLifetime = 1.6f;
+        main.startColor = isCharging ? new Color(0.15f, 0.95f, 1f) : new Color(1f, 0.85f, 0.2f);
+        var em = ps.emission;
+        em.SetBursts(new[] { new ParticleSystem.Burst(0f, 40) });
+        landmark.arrivalParticle = ps;
+
+        return landmark;
+    }
+
+    private static void CreateSignPillar(Transform parent, Vector3 localPos)
+    {
+        GameObject pillar = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+        pillar.name = "Pillar";
+        pillar.transform.SetParent(parent);
+        pillar.transform.localPosition = localPos;
+        pillar.transform.localScale = new Vector3(0.3f, 3.5f, 0.3f);
+        pillar.GetComponent<MeshRenderer>().sharedMaterial = GetOrCreateMaterial("Mat_Pillar_Wood", new Color(0.45f, 0.3f, 0.18f));
+        UnityEngine.Object.DestroyImmediate(pillar.GetComponent<Collider>());
+    }
+
+    private static void SetupAirportAirplane(Transform airportTransform)
+    {
+        GameObject flightRoot = new GameObject("AirportAirplaneFlight");
+        flightRoot.transform.SetParent(airportTransform);
+        flightRoot.transform.localPosition = Vector3.zero;
+
+        AirportPlaneAnimation anim = flightRoot.AddComponent<AirportPlaneAnimation>();
+
+        GameObject planeObj = new GameObject("AirplaneModel");
+        planeObj.transform.SetParent(flightRoot.transform);
+        planeObj.transform.localPosition = new Vector3(0f, 16f, 0f);
+
+        GameObject body = GameObject.CreatePrimitive(PrimitiveType.Capsule);
+        body.transform.SetParent(planeObj.transform);
+        body.transform.localScale = new Vector3(1.6f, 5.0f, 1.6f);
+        body.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+        body.GetComponent<MeshRenderer>().sharedMaterial = GetOrCreateMaterial("Mat_AirplaneBody", Color.white);
+        UnityEngine.Object.DestroyImmediate(body.GetComponent<Collider>());
+
+        GameObject wing = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        wing.transform.SetParent(planeObj.transform);
+        wing.transform.localScale = new Vector3(10f, 0.25f, 2.2f);
+        wing.transform.localPosition = new Vector3(0f, 0.2f, 0.5f);
+        wing.GetComponent<MeshRenderer>().sharedMaterial = GetOrCreateMaterial("Mat_AirplaneWing", new Color(0.2f, 0.55f, 0.98f));
+        UnityEngine.Object.DestroyImmediate(wing.GetComponent<Collider>());
+
+        anim.planeModel = planeObj.transform;
+    }
+
+    #endregion
+
+    #region 2.5D 가족 승객 정류장 인도 위 배치
+
+    private static void SetupFamilyPassengers(Transform parent, Dictionary<string, Landmark> landmarks, TMP_FontAsset fontAsset)
+    {
+        GameObject passengersRoot = new GameObject("FamilyPassengers");
+        passengersRoot.transform.SetParent(parent);
+
+        var passengerList = new[]
+        {
+            new { Name = "선율이", SpawnLM = "아이파크캐슬", DestLM = "나라유치원", Tex = "선율.png", Offset = new Vector3(-3.5f, 0f, 3.5f) },
+            new { Name = "태율이", SpawnLM = "아이파크캐슬", DestLM = "코코어린이집", Tex = "태율.jpg", Offset = new Vector3(0f, 0f, 4.0f) },
+            new { Name = "엄마",   SpawnLM = "아이파크캐슬", DestLM = "하남 스타필드", Tex = "엄마.png", Offset = new Vector3(3.5f, 0f, 3.5f) },
+            new { Name = "아빠",   SpawnLM = "아이파크캐슬", DestLM = "글빛공원", Tex = "아빠.png", Offset = new Vector3(6.5f, 0f, 3.5f) },
+            new { Name = "친할머니", SpawnLM = "왕십리 삼성아파트", DestLM = "아이파크캐슬", Tex = "친할머니.png", Offset = new Vector3(-2f, 0f, 3.5f) },
+            new { Name = "친할아버지", SpawnLM = "왕십리 삼성아파트", DestLM = "에버랜드", Tex = "친할아버지.png", Offset = new Vector3(2f, 0f, 3.5f) },
+            new { Name = "외할머니", SpawnLM = "하남 풍산 아이파크", DestLM = "롯데월드", Tex = "외할머니.png", Offset = new Vector3(-2f, 0f, 3.5f) },
+            new { Name = "외할아버지", SpawnLM = "하남 풍산 아이파크", DestLM = "인천공항", Tex = "외할아버지.png", Offset = new Vector3(2f, 0f, 3.5f) }
+        };
+
+        foreach (var p in passengerList)
+        {
+            if (!landmarks.ContainsKey(p.SpawnLM)) continue;
+            Vector3 spawnPos = landmarks[p.SpawnLM].transform.position + p.Offset;
+            CreatePassengerObject(passengersRoot.transform, p.Name, p.DestLM, p.Tex, spawnPos, fontAsset);
+        }
+    }
+
+    private static void CreatePassengerObject(Transform parent, string name, string destination, string texFileName, Vector3 pos, TMP_FontAsset fontAsset)
+    {
+        GameObject pObj = new GameObject($"Passenger_{name}");
+        pObj.transform.SetParent(parent);
+        pObj.transform.position = pos;
+
+        Passenger passenger = pObj.AddComponent<Passenger>();
+        passenger.passengerName = name;
+        passenger.destinationLandmarkName = destination;
+
+        SphereCollider col = pObj.AddComponent<SphereCollider>();
+        col.isTrigger = true;
+        col.radius = 2.8f;
+
+        GameObject visualRoot = new GameObject("VisualRoot");
+        visualRoot.transform.SetParent(pObj.transform);
+        visualRoot.transform.localPosition = Vector3.zero;
+        passenger.visualRoot = visualRoot.transform;
+
+        // 초상화 Quad
+        GameObject quad = GameObject.CreatePrimitive(PrimitiveType.Quad);
+        quad.name = "PortraitQuad";
+        quad.transform.SetParent(visualRoot.transform);
+        quad.transform.localPosition = new Vector3(0f, 1.35f, 0f);
+        quad.transform.localScale = new Vector3(1.8f, 1.8f, 1f);
+        UnityEngine.Object.DestroyImmediate(quad.GetComponent<Collider>());
+
+        string texPath = Path.Combine(FamilyTexturesDir, texFileName);
+        Texture2D faceTex = AssetDatabase.LoadAssetAtPath<Texture2D>(texPath);
+        Material mat = new Material(Shader.Find("Universal Render Pipeline/Unlit") ?? Shader.Find("Sprites/Default"));
+        if (faceTex != null)
+        {
+            mat.mainTexture = faceTex;
+            passenger.faceTexture = faceTex;
+        }
+        quad.GetComponent<MeshRenderer>().sharedMaterial = mat;
+        passenger.portraitRenderer = quad.GetComponent<MeshRenderer>();
+
+        // 머리 위 이름표 TMP
+        GameObject nameObj = new GameObject("NameTagTMP");
+        nameObj.transform.SetParent(visualRoot.transform);
+        nameObj.transform.localPosition = new Vector3(0f, 2.65f, 0f);
+        TextMeshPro nameTMP = nameObj.AddComponent<TextMeshPro>();
+        nameTMP.text = $"{name}\n<size=70%><color=#FFE680>▶ {destination}</color></size>";
+        nameTMP.fontSize = 4.8f;
+        nameTMP.alignment = TextAlignmentOptions.Center;
+        nameTMP.fontStyle = FontStyles.Bold;
+        if (fontAsset != null) nameTMP.font = fontAsset;
+        passenger.nameTagText = nameTMP;
+
+        // 발밑 반짝이 파티클
+        GameObject sparkleObj = new GameObject("SparkleParticle");
+        sparkleObj.transform.SetParent(visualRoot.transform);
+        sparkleObj.transform.localPosition = new Vector3(0f, 0.2f, 0f);
+        ParticleSystem ps = sparkleObj.AddComponent<ParticleSystem>();
+        var main = ps.main;
+        main.playOnAwake = true;
+        main.startSize = 0.4f;
+        main.startLifetime = 1.2f;
+        main.startColor = new Color(1f, 0.9f, 0.3f, 0.85f);
+        passenger.sparkleParticle = ps;
+    }
+
+    #endregion
+
+    #region 상용 모바일 UI & 퀴즈 모달
+
+    private static void SetupCommercialGradeUI(BusController bus, TMP_FontAsset fontAsset)
+    {
+        GameObject canvasObj = GameObject.Find("GameCanvas");
+        if (canvasObj == null)
+        {
+            canvasObj = new GameObject("GameCanvas");
+            Canvas canvas = canvasObj.AddComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+
+            CanvasScaler scaler = canvasObj.AddComponent<CanvasScaler>();
+            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            scaler.referenceResolution = new Vector2(2560, 1600); // 갤럭시 탭 S9 울트라 (16:10 해상도)
+            scaler.matchWidthOrHeight = 0.5f;
+
+            canvasObj.AddComponent<GraphicRaycaster>();
+        }
+
+        GameHUD hud = canvasObj.GetComponent<GameHUD>() ?? canvasObj.AddComponent<GameHUD>();
+        MobileTouchControls controls = canvasObj.GetComponent<MobileTouchControls>() ?? canvasObj.AddComponent<MobileTouchControls>();
+
+        // 1. 상단 미션 안내 바 (둥근 글래스모피즘 테두리 바)
+        SetupTopMissionHUD(canvasObj.transform, hud, fontAsset);
+
+        // 2. 모바일 터치 페달 및 조향 버튼 (가속, 브레이크, 좌/우, 빵빵)
+        SetupMobileTouchHUD(canvasObj.transform, hud, controls, fontAsset);
+
+        // 3. 미니게임 퀴즈 모달 팝업
+        SetupMiniGameModal(canvasObj.transform, fontAsset);
+    }
+
+    private static void SetupTopMissionHUD(Transform canvasTransform, GameHUD hud, TMP_FontAsset fontAsset)
+    {
+        Sprite panelSprite = AssetDatabase.LoadAssetAtPath<Sprite>(Path.Combine(UITexturesDir, "UI_Panel_Rounded.png"));
+
+        // 상단 컨테이너
+        GameObject topBar = new GameObject("TopMissionBar");
+        topBar.transform.SetParent(canvasTransform, false);
+        RectTransform rt = topBar.AddComponent<RectTransform>();
+        rt.anchorMin = new Vector2(0.08f, 0.88f);
+        rt.anchorMax = new Vector2(0.92f, 0.98f);
+        rt.offsetMin = rt.offsetMax = Vector2.zero;
+
+        Image bg = topBar.AddComponent<Image>();
+        if (panelSprite != null)
+        {
+            bg.sprite = panelSprite;
+            bg.type = Image.Type.Sliced;
+        }
+        else
+        {
+            bg.color = new Color(0.12f, 0.16f, 0.28f, 0.9f);
+        }
+
+        // 별 아이콘
+        GameObject starObj = new GameObject("StarIcon");
+        starObj.transform.SetParent(topBar.transform, false);
+        RectTransform starRT = starObj.AddComponent<RectTransform>();
+        starRT.anchorMin = new Vector2(0.015f, 0.15f);
+        starRT.anchorMax = new Vector2(0.065f, 0.85f);
+        starRT.offsetMin = starRT.offsetMax = Vector2.zero;
+        TextMeshProUGUI starTMP = starObj.AddComponent<TextMeshProUGUI>();
+        starTMP.text = "⭐";
+        starTMP.fontSize = 54;
+        starTMP.alignment = TextAlignmentOptions.Center;
+
+        // 미션 텍스트 (줄바꿈 없이 넉넉하고 시원한 텍스트)
+        GameObject missionTextObj = new GameObject("MissionText");
+        missionTextObj.transform.SetParent(topBar.transform, false);
+        RectTransform textRT = missionTextObj.AddComponent<RectTransform>();
+        textRT.anchorMin = new Vector2(0.07f, 0.1f);
+        textRT.anchorMax = new Vector2(0.68f, 0.9f);
+        textRT.offsetMin = textRT.offsetMax = Vector2.zero;
+
+        TextMeshProUGUI missionTMP = missionTextObj.AddComponent<TextMeshProUGUI>();
+        missionTMP.text = "선율이를 <color=#FFEB3B>[나라유치원]</color>에 데려다주세요! 🎒";
+        missionTMP.fontSize = 44;
+        missionTMP.fontStyle = FontStyles.Bold;
+        missionTMP.color = Color.white;
+        missionTMP.enableAutoSizing = true;
+        missionTMP.fontSizeMin = 28;
+        missionTMP.fontSizeMax = 48;
+        missionTMP.alignment = TextAlignmentOptions.MidlineLeft;
+        if (fontAsset != null) missionTMP.font = fontAsset;
+        hud.missionTextTMP = missionTMP;
+
+        // 배터리 & 속도 표시
+        GameObject statusObj = new GameObject("StatusGroup");
+        statusObj.transform.SetParent(topBar.transform, false);
+        RectTransform statusRT = statusObj.AddComponent<RectTransform>();
+        statusRT.anchorMin = new Vector2(0.70f, 0.1f);
+        statusRT.anchorMax = new Vector2(0.98f, 0.9f);
+        statusRT.offsetMin = statusRT.offsetMax = Vector2.zero;
+
+        TextMeshProUGUI statusTMP = statusObj.AddComponent<TextMeshProUGUI>();
+        statusTMP.text = "100% ⚡ | 0 km/h";
+        statusTMP.fontSize = 40;
+        statusTMP.fontStyle = FontStyles.Bold;
+        statusTMP.color = new Color(0.4f, 1f, 0.55f);
+        statusTMP.alignment = TextAlignmentOptions.MidlineRight;
+        if (fontAsset != null) statusTMP.font = fontAsset;
+        hud.batteryTextTMP = statusTMP;
+
+        // 토스트 알림 패널
+        GameObject toast = new GameObject("ToastPanel");
+        toast.transform.SetParent(canvasTransform, false);
+        RectTransform toastRT = toast.AddComponent<RectTransform>();
+        toastRT.anchorMin = new Vector2(0.25f, 0.74f);
+        toastRT.anchorMax = new Vector2(0.75f, 0.84f);
+        toastRT.offsetMin = toastRT.offsetMax = Vector2.zero;
+
+        Image toastBG = toast.AddComponent<Image>();
+        if (panelSprite != null) { toastBG.sprite = panelSprite; toastBG.type = Image.Type.Sliced; toastBG.color = new Color(1f, 0.92f, 0.3f, 0.98f); }
+        else toastBG.color = new Color(1f, 0.9f, 0.2f, 0.95f);
+
+        GameObject toastTextObj = new GameObject("ToastText");
+        toastTextObj.transform.SetParent(toast.transform, false);
+        RectTransform ttRT = toastTextObj.AddComponent<RectTransform>();
+        ttRT.anchorMin = Vector2.zero;
+        ttRT.anchorMax = Vector2.one;
+        ttRT.offsetMin = ttRT.offsetMax = Vector2.zero;
+
+        TextMeshProUGUI toastTMP = toastTextObj.AddComponent<TextMeshProUGUI>();
+        toastTMP.text = "선율이 탑승 완료! (1/4)";
+        toastTMP.fontSize = 46;
+        toastTMP.fontStyle = FontStyles.Bold;
+        toastTMP.color = new Color(0.12f, 0.12f, 0.18f);
+        toastTMP.alignment = TextAlignmentOptions.Center;
+        if (fontAsset != null) toastTMP.font = fontAsset;
+
+        hud.toastPanel = toast;
+        hud.toastTextTMP = toastTMP;
+        toast.SetActive(false);
+    }
+
+    private static void SetupMobileTouchHUD(Transform canvasTransform, GameHUD hud, MobileTouchControls controls, TMP_FontAsset fontAsset)
+    {
+        Sprite steerSprite = AssetDatabase.LoadAssetAtPath<Sprite>(Path.Combine(UITexturesDir, "UI_Btn_Steer.png"));
+        Sprite gasSprite = AssetDatabase.LoadAssetAtPath<Sprite>(Path.Combine(UITexturesDir, "UI_Pedal_Gas.png"));
+        Sprite brakeSprite = AssetDatabase.LoadAssetAtPath<Sprite>(Path.Combine(UITexturesDir, "UI_Pedal_Brake.png"));
+        Sprite hornSprite = AssetDatabase.LoadAssetAtPath<Sprite>(Path.Combine(UITexturesDir, "UI_Btn_Horn.png"));
+
+        // 좌측 핸들 조향 버튼 (좌/우)
+        CreateSpriteTouchButton(canvasTransform, "Btn_Left", "◀", new Vector2(0.04f, 0.05f), new Vector2(0.14f, 0.22f), steerSprite, fontAsset,
+            controls.OnLeftDown, controls.OnLeftUp);
+
+        CreateSpriteTouchButton(canvasTransform, "Btn_Right", "▶", new Vector2(0.16f, 0.05f), new Vector2(0.26f, 0.22f), steerSprite, fontAsset,
+            controls.OnRightDown, controls.OnRightUp);
+
+        // 우측 페달 (가속 / 브레이크)
+        CreateSpriteTouchButton(canvasTransform, "Btn_Gas", "가속\n🚀", new Vector2(0.85f, 0.05f), new Vector2(0.96f, 0.25f), gasSprite, fontAsset,
+            controls.OnGasDown, controls.OnGasUp);
+
+        CreateSpriteTouchButton(canvasTransform, "Btn_Brake", "정지\n🛑", new Vector2(0.72f, 0.05f), new Vector2(0.83f, 0.22f), brakeSprite, fontAsset,
+            controls.OnBrakeDown, controls.OnBrakeUp);
+
+        // 중앙 빵빵 경적 버튼
+        GameObject hornObj = CreateSpriteTouchButton(canvasTransform, "Btn_Horn", "빵빵!\n📢", new Vector2(0.44f, 0.04f), new Vector2(0.56f, 0.20f), hornSprite, fontAsset,
+            controls.OnHornClicked, null);
+
+        hud.hornButton = hornObj.GetComponent<Button>();
+    }
+
+    private static GameObject CreateSpriteTouchButton(Transform parent, string name, string label, Vector2 anchorMin, Vector2 anchorMax, Sprite sprite, TMP_FontAsset fontAsset, Action onDown, Action onUp)
+    {
+        GameObject btnObj = new GameObject(name);
+        btnObj.transform.SetParent(parent, false);
+        RectTransform rt = btnObj.AddComponent<RectTransform>();
+        rt.anchorMin = anchorMin;
+        rt.anchorMax = anchorMax;
+        rt.offsetMin = rt.offsetMax = Vector2.zero;
+
+        Image img = btnObj.AddComponent<Image>();
+        if (sprite != null) img.sprite = sprite;
+        else img.color = new Color(0.2f, 0.6f, 1f, 0.85f);
+
+        Button btn = btnObj.AddComponent<Button>();
+
+        EventTrigger trigger = btnObj.AddComponent<EventTrigger>();
+        if (onDown != null)
+        {
+            EventTrigger.Entry entryDown = new EventTrigger.Entry { eventID = EventTriggerType.PointerDown };
+            entryDown.callback.AddListener((data) => onDown.Invoke());
+            trigger.triggers.Add(entryDown);
+        }
+        if (onUp != null)
+        {
+            EventTrigger.Entry entryUp = new EventTrigger.Entry { eventID = EventTriggerType.PointerUp };
+            entryUp.callback.AddListener((data) => onUp.Invoke());
+            trigger.triggers.Add(entryUp);
+        }
+
+        GameObject txtObj = new GameObject("Label");
+        txtObj.transform.SetParent(btnObj.transform, false);
+        RectTransform txtRT = txtObj.AddComponent<RectTransform>();
+        txtRT.anchorMin = Vector2.zero;
+        txtRT.anchorMax = Vector2.one;
+        txtRT.offsetMin = txtRT.offsetMax = Vector2.zero;
+
+        TextMeshProUGUI tmp = txtObj.AddComponent<TextMeshProUGUI>();
+        tmp.text = label;
+        tmp.fontSize = 42;
+        tmp.fontStyle = FontStyles.Bold;
+        tmp.alignment = TextAlignmentOptions.Center;
+        tmp.color = Color.white;
+        if (fontAsset != null) tmp.font = fontAsset;
+
+        return btnObj;
+    }
+
+    private static void SetupMiniGameModal(Transform canvasTransform, TMP_FontAsset fontAsset)
+    {
+        Sprite panelSprite = AssetDatabase.LoadAssetAtPath<Sprite>(Path.Combine(UITexturesDir, "UI_Panel_Rounded.png"));
+
+        GameObject modalObj = new GameObject("MiniGameModal");
+        modalObj.transform.SetParent(canvasTransform, false);
+        RectTransform rt = modalObj.AddComponent<RectTransform>();
+        rt.anchorMin = Vector2.zero;
+        rt.anchorMax = Vector2.one;
+        rt.offsetMin = rt.offsetMax = Vector2.zero;
+
+        Image dimmer = modalObj.AddComponent<Image>();
+        dimmer.color = new Color(0f, 0f, 0f, 0.78f);
+
+        MiniGameUI miniGame = modalObj.AddComponent<MiniGameUI>();
+        miniGame.modalRoot = modalObj;
+
+        // 팝업 카드 상자
+        GameObject cardBox = new GameObject("CardBox");
+        cardBox.transform.SetParent(modalObj.transform, false);
+        RectTransform boxRT = cardBox.AddComponent<RectTransform>();
+        boxRT.anchorMin = new Vector2(0.18f, 0.16f);
+        boxRT.anchorMax = new Vector2(0.82f, 0.84f);
+        boxRT.offsetMin = boxRT.offsetMax = Vector2.zero;
+
+        Image boxBG = cardBox.AddComponent<Image>();
+        if (panelSprite != null) { boxBG.sprite = panelSprite; boxBG.type = Image.Type.Sliced; }
+        else boxBG.color = new Color(0.98f, 0.98f, 0.94f);
+
+        // 타이틀
+        GameObject titleObj = new GameObject("ModalTitle");
+        titleObj.transform.SetParent(cardBox.transform, false);
+        RectTransform tRT = titleObj.AddComponent<RectTransform>();
+        tRT.anchorMin = new Vector2(0.05f, 0.83f);
+        tRT.anchorMax = new Vector2(0.95f, 0.96f);
+        tRT.offsetMin = tRT.offsetMax = Vector2.zero;
+
+        TextMeshProUGUI titleTMP = titleObj.AddComponent<TextMeshProUGUI>();
+        titleTMP.text = "⭐ 신나는 도착 퀴즈! ⭐";
+        titleTMP.fontSize = 58;
+        titleTMP.fontStyle = FontStyles.Bold;
+        titleTMP.color = new Color(1f, 0.88f, 0.2f);
+        titleTMP.alignment = TextAlignmentOptions.Center;
+        if (fontAsset != null) titleTMP.font = fontAsset;
+        miniGame.titleTMP = titleTMP;
+
+        // 질문
+        GameObject qObj = new GameObject("ModalQuestion");
+        qObj.transform.SetParent(cardBox.transform, false);
+        RectTransform qRT = qObj.AddComponent<RectTransform>();
+        qRT.anchorMin = new Vector2(0.05f, 0.66f);
+        qRT.anchorMax = new Vector2(0.95f, 0.81f);
+        qRT.offsetMin = qRT.offsetMax = Vector2.zero;
+
+        TextMeshProUGUI qTMP = qObj.AddComponent<TextMeshProUGUI>();
+        qTMP.text = "어디에 도착했을까요? 알맞은 간판을 찾아 터치해 볼까요?";
+        qTMP.fontSize = 44;
+        qTMP.color = Color.white;
+        qTMP.alignment = TextAlignmentOptions.Center;
+        if (fontAsset != null) qTMP.font = fontAsset;
+        miniGame.questionTMP = qTMP;
+
+        // 3개 선택 카드
+        Color[] cardColors = {
+            new Color(0.2f, 0.7f, 1f),
+            new Color(1f, 0.65f, 0.15f),
+            new Color(0.35f, 0.85f, 0.45f)
+        };
+
+        for (int i = 0; i < 3; i++)
+        {
+            float minX = 0.06f + i * 0.32f;
+            float maxX = minX + 0.26f;
+
+            GameObject card = new GameObject($"Card_{i}");
+            card.transform.SetParent(cardBox.transform, false);
+            RectTransform cRT = card.AddComponent<RectTransform>();
+            cRT.anchorMin = new Vector2(minX, 0.22f);
+            cRT.anchorMax = new Vector2(maxX, 0.58f);
+            cRT.offsetMin = cRT.offsetMax = Vector2.zero;
+
+            Image cImg = card.AddComponent<Image>();
+            if (panelSprite != null) { cImg.sprite = panelSprite; cImg.type = Image.Type.Sliced; cImg.color = cardColors[i]; }
+            else cImg.color = cardColors[i];
+
+            Button cBtn = card.AddComponent<Button>();
+            miniGame.cardButtons.Add(cBtn);
+
+            GameObject cTxtObj = new GameObject("Text");
+            cTxtObj.transform.SetParent(card.transform, false);
+            RectTransform ctRT = cTxtObj.AddComponent<RectTransform>();
+            ctRT.anchorMin = Vector2.zero;
+            ctRT.anchorMax = Vector2.one;
+            ctRT.offsetMin = ctRT.offsetMax = Vector2.zero;
+
+            TextMeshProUGUI cTMP = cTxtObj.AddComponent<TextMeshProUGUI>();
+            cTMP.text = $"보기 {i + 1}";
+            cTMP.fontSize = 46;
+            cTMP.fontStyle = FontStyles.Bold;
+            cTMP.alignment = TextAlignmentOptions.Center;
+            cTMP.color = Color.white;
+            if (fontAsset != null) cTMP.font = fontAsset;
+            miniGame.cardTexts.Add(cTMP);
+        }
+
+        // 축하 텍스트
+        GameObject celObj = new GameObject("CelebrationText");
+        celObj.transform.SetParent(cardBox.transform, false);
+        RectTransform celRT = celObj.AddComponent<RectTransform>();
+        celRT.anchorMin = new Vector2(0.05f, 0.05f);
+        celRT.anchorMax = new Vector2(0.95f, 0.18f);
+        celRT.offsetMin = celRT.offsetMax = Vector2.zero;
+
+        TextMeshProUGUI celTMP = celObj.AddComponent<TextMeshProUGUI>();
+        celTMP.text = "🎉 정답이에요! 참 잘했어요! ⭐⭐⭐";
+        celTMP.fontSize = 50;
+        celTMP.fontStyle = FontStyles.Bold;
+        celTMP.color = new Color(1f, 0.9f, 0.25f);
+        celTMP.alignment = TextAlignmentOptions.Center;
+        if (fontAsset != null) celTMP.font = fontAsset;
+        miniGame.celebrationTMP = celTMP;
+        celObj.SetActive(false);
+
+        modalObj.SetActive(false);
+    }
+
+    #endregion
+
+    #region 매니저 & 유틸
+
+    private static void SetupManagers(Transform parent)
+    {
+        GameObject mgrObj = GameObject.Find("PassengerManager");
+        if (mgrObj == null)
+        {
+            mgrObj = new GameObject("PassengerManager");
+            mgrObj.transform.SetParent(parent);
+        }
+        if (mgrObj.GetComponent<PassengerManager>() == null)
+        {
+            mgrObj.AddComponent<PassengerManager>();
         }
     }
 
@@ -73,11 +912,7 @@ public static class AutoSceneBuilder
     public static void ConvertAllLegacyMaterialsToURP()
     {
         Shader urpLit = Shader.Find("Universal Render Pipeline/Lit");
-        if (urpLit == null)
-        {
-            Debug.LogWarning("[CocoNara] Universal Render Pipeline/Lit 셰이더를 찾을 수 없습니다.");
-            return;
-        }
+        if (urpLit == null) return;
 
         string[] guids = AssetDatabase.FindAssets("t:Material", new[] { "Assets" });
         int converted = 0;
@@ -118,429 +953,28 @@ public static class AutoSceneBuilder
         }
 
         AssetDatabase.SaveAssets();
-        Debug.Log($"<color=#00FF88>[CocoNara] {converted}개의 레거시 머티리얼을 URP Lit 셰이더로 성공적으로 변환했습니다!</color>");
-        if (!Application.isBatchMode && converted > 0)
-        {
-            EditorUtility.DisplayDialog("CocoNaraBusStory", $"{converted}개의 구버전 핑크색 머티리얼을 URP 전용 Lit 셰이더로 정상 변환했습니다!", "확인");
-        }
     }
 
     [MenuItem("CocoNara/3. EventSystem 입력 모듈 오류 수정 (Fix Input Error)", false, 3)]
     public static void FixEventSystemInputModule()
     {
         EventSystem[] allES = UnityEngine.Object.FindObjectsByType<EventSystem>(FindObjectsSortMode.None);
-        int fixedCount = 0;
-
         Type newModuleType = Type.GetType("UnityEngine.InputSystem.UI.InputSystemUIInputModule, Unity.InputSystem");
 
         foreach (var es in allES)
         {
-            // 구버전 StandaloneInputModule 제거
             StandaloneInputModule sim = es.GetComponent<StandaloneInputModule>();
             if (sim != null)
             {
                 UnityEngine.Object.DestroyImmediate(sim);
-                fixedCount++;
             }
 
-            // 신규 InputSystemUIInputModule 추가
             if (newModuleType != null && es.GetComponent(newModuleType) == null)
             {
                 es.gameObject.AddComponent(newModuleType);
-                fixedCount++;
             }
-
             EditorUtility.SetDirty(es.gameObject);
         }
-
-        if (fixedCount > 0)
-        {
-            EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
-            EditorSceneManager.SaveScene(EditorSceneManager.GetActiveScene());
-            Debug.Log("<color=#00FF88>[CocoNara] EventSystem이 New Input System 전용 InputSystemUIInputModule로 교체되었습니다!</color>");
-        }
-    }
-
-    [MenuItem("CocoNara/4. 버스 표정 및 에셋 재생성 (Generate Textures)", false, 4)]
-    public static void GenerateAssetsOnly()
-    {
-        EnsureDirectories();
-        GenerateBusFaceTextures();
-        EnsureFamilyMemberTextures();
-        GetOrCreateTMPFontAsset();
-        AssetDatabase.Refresh();
-        if (!Application.isBatchMode)
-        {
-            EditorUtility.DisplayDialog("CocoNaraBusStory", "표정 텍스처 및 에셋이 정상 생성되었습니다.", "확인");
-        }
-    }
-
-    private static void EnsureDirectories()
-    {
-        if (!Directory.Exists(BusFacesDir)) Directory.CreateDirectory(BusFacesDir);
-        if (!Directory.Exists(FamilyTexturesDir)) Directory.CreateDirectory(FamilyTexturesDir);
-        AssetDatabase.Refresh();
-    }
-
-    #region 텍스처 & 폰트 생성
-
-    private static void GenerateBusFaceTextures()
-    {
-        string normalPath = Path.Combine(BusFacesDir, "BusFace_Normal.png");
-        string winkPath = Path.Combine(BusFacesDir, "BusFace_Wink.png");
-        string chargingPath = Path.Combine(BusFacesDir, "BusFace_Charging.png");
-
-        if (!File.Exists(normalPath))
-        {
-            Texture2D tex = CreateProceduralFaceTexture(FaceType.Normal);
-            File.WriteAllBytes(normalPath, tex.EncodeToPNG());
-            AssetDatabase.ImportAsset(normalPath);
-        }
-
-        if (!File.Exists(winkPath))
-        {
-            Texture2D tex = CreateProceduralFaceTexture(FaceType.Wink);
-            File.WriteAllBytes(winkPath, tex.EncodeToPNG());
-            AssetDatabase.ImportAsset(winkPath);
-        }
-
-        if (!File.Exists(chargingPath))
-        {
-            Texture2D tex = CreateProceduralFaceTexture(FaceType.Charging);
-            File.WriteAllBytes(chargingPath, tex.EncodeToPNG());
-            AssetDatabase.ImportAsset(chargingPath);
-        }
-    }
-
-    private enum FaceType { Normal, Wink, Charging }
-
-    private static Texture2D CreateProceduralFaceTexture(FaceType type)
-    {
-        int size = 512;
-        Texture2D tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
-        Color clear = new Color(0, 0, 0, 0);
-
-        // 투명 배경 초기화
-        for (int y = 0; y < size; y++)
-            for (int x = 0; x < size; x++)
-                tex.SetPixel(x, y, clear);
-
-        // 눈 위치 세팅
-        Vector2 leftEye = new Vector2(170, 310);
-        Vector2 rightEye = new Vector2(342, 310);
-        int eyeRadius = 55;
-
-        Color eyeColor = new Color(0.12f, 0.15f, 0.22f);
-        Color pupilColor = new Color(0.2f, 0.45f, 0.85f);
-        Color white = Color.white;
-        Color pink = new Color(1f, 0.5f, 0.65f, 0.7f);
-
-        // 빰 볼터치
-        DrawFilledCircle(tex, new Vector2(120, 230), 40, pink);
-        DrawFilledCircle(tex, new Vector2(392, 230), 40, pink);
-
-        if (type == FaceType.Normal)
-        {
-            // 큰 똘망똘망한 눈
-            DrawFilledCircle(tex, leftEye, eyeRadius, eyeColor);
-            DrawFilledCircle(tex, rightEye, eyeRadius, eyeColor);
-            DrawFilledCircle(tex, leftEye + new Vector2(0, 10), eyeRadius - 15, pupilColor);
-            DrawFilledCircle(tex, rightEye + new Vector2(0, 10), eyeRadius - 15, pupilColor);
-            // 반짝이는 하이라이트
-            DrawFilledCircle(tex, leftEye + new Vector2(-15, 18), 16, white);
-            DrawFilledCircle(tex, leftEye + new Vector2(16, -10), 9, white);
-            DrawFilledCircle(tex, rightEye + new Vector2(-15, 18), 16, white);
-            DrawFilledCircle(tex, rightEye + new Vector2(16, -10), 9, white);
-        }
-        else if (type == FaceType.Wink)
-        {
-            // 왼쪽 윙크 (^_~)
-            DrawWinkEye(tex, leftEye, eyeRadius);
-            // 오른쪽 똘망눈
-            DrawFilledCircle(tex, rightEye, eyeRadius, eyeColor);
-            DrawFilledCircle(tex, rightEye + new Vector2(0, 10), eyeRadius - 15, pupilColor);
-            DrawFilledCircle(tex, rightEye + new Vector2(-15, 18), 18, white);
-            DrawFilledCircle(tex, rightEye + new Vector2(16, -10), 10, white);
-        }
-        else if (type == FaceType.Charging)
-        {
-            // 별빛 눈 (*_*)
-            DrawStarEye(tex, leftEye, 50, new Color(1f, 0.9f, 0.2f));
-            DrawStarEye(tex, rightEye, 50, new Color(1f, 0.9f, 0.2f));
-        }
-
-        // 활짝 웃는 입 (Curved Smile)
-        DrawSmileMouth(tex, new Vector2(256, 170), 95, 45, type == FaceType.Wink);
-
-        tex.Apply();
-        return tex;
-    }
-
-    private static void DrawFilledCircle(Texture2D tex, Vector2 center, int radius, Color color)
-    {
-        int r2 = radius * radius;
-        for (int y = -radius; y <= radius; y++)
-        {
-            for (int x = -radius; x <= radius; x++)
-            {
-                if (x * x + y * y <= r2)
-                {
-                    int px = (int)center.x + x;
-                    int py = (int)center.y + y;
-                    if (px >= 0 && px < tex.width && py >= 0 && py < tex.height)
-                    {
-                        Color existing = tex.GetPixel(px, py);
-                        tex.SetPixel(px, py, Color.Lerp(existing, color, color.a));
-                    }
-                }
-            }
-        }
-    }
-
-    private static void DrawWinkEye(Texture2D tex, Vector2 center, int radius)
-    {
-        for (int x = -radius; x <= radius; x++)
-        {
-            float normX = (float)x / radius;
-            float yArc = (1f - normX * normX) * (radius * 0.7f);
-            int py = (int)(center.y + yArc - 15);
-            int px = (int)center.x + x;
-            DrawThickPoint(tex, px, py, 10, new Color(0.12f, 0.15f, 0.22f));
-        }
-    }
-
-    private static void DrawStarEye(Texture2D tex, Vector2 center, int size, Color color)
-    {
-        DrawFilledCircle(tex, center, size / 2, color);
-        for (int i = -size; i <= size; i++)
-        {
-            DrawThickPoint(tex, (int)center.x + i, (int)center.y, 10, color);
-            DrawThickPoint(tex, (int)center.x, (int)center.y + i, 10, color);
-            DrawThickPoint(tex, (int)center.x + i, (int)center.y + i, 8, color);
-            DrawThickPoint(tex, (int)center.x + i, (int)center.y - i, 8, color);
-        }
-    }
-
-    private static void DrawSmileMouth(Texture2D tex, Vector2 center, int width, int depth, bool openMouth)
-    {
-        Color lipColor = new Color(0.12f, 0.15f, 0.22f);
-        Color mouthInside = new Color(0.9f, 0.25f, 0.35f);
-
-        for (int x = -width; x <= width; x++)
-        {
-            float normX = (float)x / width;
-            float bottomY = center.y - (1f - normX * normX) * depth;
-            int px = (int)center.x + x;
-
-            if (openMouth)
-            {
-                for (int y = (int)bottomY; y <= center.y; y++)
-                {
-                    if (px >= 0 && px < tex.width && y >= 0 && y < tex.height)
-                    {
-                        tex.SetPixel(px, y, mouthInside);
-                    }
-                }
-            }
-
-            DrawThickPoint(tex, px, (int)bottomY, 9, lipColor);
-        }
-    }
-
-    private static void DrawThickPoint(Texture2D tex, int px, int py, int thickness, Color color)
-    {
-        int r = thickness / 2;
-        for (int y = -r; y <= r; y++)
-        {
-            for (int x = -r; x <= r; x++)
-            {
-                int ix = px + x;
-                int iy = py + y;
-                if (ix >= 0 && ix < tex.width && iy >= 0 && iy < tex.height)
-                {
-                    tex.SetPixel(ix, iy, color);
-                }
-            }
-        }
-    }
-
-    private static void EnsureFamilyMemberTextures()
-    {
-        // 선율, 태율, 엄마, 아빠 외에 친할머니, 친할아버지, 외할머니, 외할아버지 텍스처가 없을 경우 예쁜 파스텔톤 뱃지 자동 생성
-        string[] extraMembers = { "친할머니", "친할아버지", "외할머니", "외할아버지" };
-        Color[] badgeColors = {
-            new Color(1f, 0.7f, 0.8f),
-            new Color(0.6f, 0.8f, 1f),
-            new Color(1f, 0.85f, 0.6f),
-            new Color(0.7f, 0.9f, 0.7f)
-        };
-
-        for (int i = 0; i < extraMembers.Length; i++)
-        {
-            string filename = extraMembers[i] + ".png";
-            string path = Path.Combine(FamilyTexturesDir, filename);
-            if (!File.Exists(path))
-            {
-                Texture2D badge = CreateAvatarBadgeTexture(extraMembers[i], badgeColors[i]);
-                File.WriteAllBytes(path, badge.EncodeToPNG());
-                AssetDatabase.ImportAsset(path);
-            }
-        }
-    }
-
-    private static Texture2D CreateAvatarBadgeTexture(string name, Color bgColor)
-    {
-        int size = 256;
-        Texture2D tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
-        Vector2 center = new Vector2(size / 2, size / 2);
-        int radius = size / 2 - 10;
-
-        for (int y = 0; y < size; y++)
-        {
-            for (int x = 0; x < size; x++)
-            {
-                float dist = Vector2.Distance(new Vector2(x, y), center);
-                if (dist <= radius - 8)
-                {
-                    tex.SetPixel(x, y, bgColor);
-                }
-                else if (dist <= radius)
-                {
-                    tex.SetPixel(x, y, Color.white);
-                }
-                else
-                {
-                    tex.SetPixel(x, y, new Color(0, 0, 0, 0));
-                }
-            }
-        }
-
-        // 중앙에 미소 짓는 얼굴 심볼
-        DrawFilledCircle(tex, center + new Vector2(-40, 25), 14, Color.black);
-        DrawFilledCircle(tex, center + new Vector2(40, 25), 14, Color.black);
-        DrawSmileMouth(tex, center + new Vector2(0, -25), 50, 25, true);
-
-        tex.Apply();
-        return tex;
-    }
-
-    private static TMP_FontAsset GetOrCreateTMPFontAsset()
-    {
-        TMP_FontAsset fontAsset = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(FontAssetPath);
-        if (fontAsset != null) return fontAsset;
-
-        Font sourceFont = AssetDatabase.LoadAssetAtPath<Font>(FontsPath);
-        if (sourceFont != null)
-        {
-            try
-            {
-                fontAsset = TMP_FontAsset.CreateFontAsset(sourceFont);
-                if (fontAsset != null)
-                {
-                    AssetDatabase.CreateAsset(fontAsset, FontAssetPath);
-                    EditorUtility.SetDirty(fontAsset);
-                    AssetDatabase.SaveAssets();
-                    return fontAsset;
-                }
-            }
-            catch (Exception e)
-            {
-                Debug.LogWarning("[CocoNara] TMP_FontAsset 자동 생성 실패 (기본 TMP 폰트로 대체): " + e.Message);
-            }
-        }
-
-        return TMP_Settings.defaultFontAsset;
-    }
-
-    #endregion
-
-    #region 씬 및 맵 구축
-
-    private static GameObject GetOrCreateRoot(string name)
-    {
-        GameObject obj = GameObject.Find(name);
-        if (obj == null)
-        {
-            obj = new GameObject(name);
-        }
-        return obj;
-    }
-
-    private static void SetupLightingAndSky()
-    {
-        Light mainLight = null;
-        Light[] lights = UnityEngine.Object.FindObjectsByType<Light>(FindObjectsSortMode.None);
-        foreach (var l in lights)
-        {
-            if (l.type == LightType.Directional)
-            {
-                mainLight = l;
-                break;
-            }
-        }
-
-        if (mainLight == null)
-        {
-            GameObject lightObj = new GameObject("Directional Light");
-            mainLight = lightObj.AddComponent<Light>();
-            mainLight.type = LightType.Directional;
-        }
-
-        mainLight.transform.rotation = Quaternion.Euler(48f, -32f, 0f);
-        mainLight.color = new Color(1f, 0.96f, 0.88f);
-        mainLight.intensity = 1.35f;
-        mainLight.shadows = LightShadows.Soft;
-
-        RenderSettings.ambientLight = new Color(0.6f, 0.65f, 0.75f);
-    }
-
-    private static void SetupRoadNetworkAndGround(GameObject parent)
-    {
-        GameObject mapRoot = new GameObject("MapEnvironment");
-        mapRoot.transform.SetParent(parent.transform);
-
-        // 1. 대형 잔디 바닥 생성 (280m x 280m)
-        GameObject ground = GameObject.CreatePrimitive(PrimitiveType.Plane);
-        ground.name = "Ground_Grass";
-        ground.transform.SetParent(mapRoot.transform);
-        ground.transform.position = Vector3.zero;
-        ground.transform.localScale = new Vector3(30f, 1f, 30f);
-
-        Material grassMat = GetOrCreateMaterial("Mat_CoCoGrass", new Color(0.38f, 0.72f, 0.35f));
-        ground.GetComponent<MeshRenderer>().sharedMaterial = grassMat;
-
-        // 2. 도로 네트워크 구축 (부드럽게 주행 가능한 십자형 & 순환 루프 도로)
-        Material roadMat = GetOrCreateMaterial("Mat_CoCoRoad", new Color(0.24f, 0.25f, 0.28f));
-        Material lineMat = GetOrCreateMaterial("Mat_CoCoRoadLine", new Color(1f, 0.88f, 0.2f));
-
-        // 메인 대로 4개 (가로, 세로 도로)
-        CreateRoadStrip(mapRoot.transform, new Vector3(0, 0.05f, 0), new Vector3(14f, 1f, 260f), roadMat, lineMat, true);
-        CreateRoadStrip(mapRoot.transform, new Vector3(0, 0.05f, 0), new Vector3(260f, 1f, 14f), roadMat, lineMat, false);
-
-        // 외곽 순환 도로 (북쪽, 남쪽, 동쪽, 서쪽 루프)
-        CreateRoadStrip(mapRoot.transform, new Vector3(0, 0.05f, 80f), new Vector3(260f, 1f, 12f), roadMat, lineMat, false);
-        CreateRoadStrip(mapRoot.transform, new Vector3(0, 0.05f, -80f), new Vector3(260f, 1f, 12f), roadMat, lineMat, false);
-        CreateRoadStrip(mapRoot.transform, new Vector3(80f, 0.05f, 0), new Vector3(12f, 1f, 260f), roadMat, lineMat, true);
-        CreateRoadStrip(mapRoot.transform, new Vector3(-80f, 0.05f, 0), new Vector3(12f, 1f, 260f), roadMat, lineMat, true);
-    }
-
-    private static void CreateRoadStrip(Transform parent, Vector3 pos, Vector3 size, Material roadMat, Material lineMat, bool isVertical)
-    {
-        GameObject road = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        road.name = isVertical ? "Road_Vertical" : "Road_Horizontal";
-        road.transform.SetParent(parent);
-        road.transform.position = pos;
-        road.transform.localScale = size;
-        road.GetComponent<MeshRenderer>().sharedMaterial = roadMat;
-
-        // 중앙 황색 실선
-        GameObject line = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        line.name = "RoadCenterLine";
-        line.transform.SetParent(road.transform);
-        line.transform.localPosition = new Vector3(0, 0.52f, 0);
-        line.transform.localScale = isVertical ? new Vector3(0.04f, 0.1f, 1f) : new Vector3(1f, 0.1f, 0.04f);
-        line.GetComponent<MeshRenderer>().sharedMaterial = lineMat;
-        UnityEngine.Object.DestroyImmediate(line.GetComponent<Collider>());
     }
 
     private static Material GetOrCreateMaterial(string name, Color color)
@@ -562,786 +996,54 @@ public static class AutoSceneBuilder
         return mat;
     }
 
-    #endregion
-
-    #region 12개 랜드마크 구축
-
-    private static Dictionary<string, Landmark> SetupAllLandmarks(GameObject parent, TMP_FontAsset fontAsset)
+    private static TMP_FontAsset GetOrCreateTMPFontAsset()
     {
-        GameObject landmarksRoot = new GameObject("Landmarks");
-        landmarksRoot.transform.SetParent(parent.transform);
+        TMP_FontAsset fontAsset = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(FontAssetPath);
+        if (fontAsset != null) return fontAsset;
 
-        Dictionary<string, Landmark> dict = new Dictionary<string, Landmark>();
-
-        // 1. 아이파크캐슬 (우리집 & 시작점)
-        dict["아이파크캐슬"] = CreateLandmarkObject(landmarksRoot.transform, "아이파크캐슬", "우리집 🏠", new Vector3(-12f, 0f, 10f), new Color(0.95f, 0.45f, 0.25f), fontAsset, false);
-
-        // 2. 코코어린이집 (태율이 등원)
-        dict["코코어린이집"] = CreateLandmarkObject(landmarksRoot.transform, "코코어린이집", "태율이 어린이집 🍼", new Vector3(65f, 0f, 65f), new Color(1f, 0.75f, 0.2f), fontAsset, false);
-
-        // 3. 나라유치원 (선율이 등원)
-        dict["나라유치원"] = CreateLandmarkObject(landmarksRoot.transform, "나라유치원", "선율이 유치원 🎒", new Vector3(-65f, 0f, 65f), new Color(0.4f, 0.75f, 1f), fontAsset, false);
-
-        // 4. 글빛공원 (힐링 공원)
-        dict["글빛공원"] = CreateLandmarkObject(landmarksRoot.transform, "글빛공원", "가족 힐링 공원 🌳", new Vector3(0f, 0f, 85f), new Color(0.35f, 0.85f, 0.4f), fontAsset, false);
-
-        // 5. 하남 스타필드 (대형 쇼핑몰)
-        dict["하남 스타필드"] = CreateLandmarkObject(landmarksRoot.transform, "하남 스타필드", "대형 쇼핑몰 🛍️", new Vector3(-95f, 0f, 0f), new Color(0.85f, 0.3f, 0.5f), fontAsset, false);
-
-        // 6. 전기차 충전소 (EV Station)
-        dict["전기차 충전소"] = CreateLandmarkObject(landmarksRoot.transform, "전기차 충전소", "친환경 급속 충전 ⚡", new Vector3(95f, 0f, 0f), new Color(0.2f, 0.85f, 0.85f), fontAsset, true);
-
-        // 7. 왕십리 삼성아파트 (친할머니, 친할아버지 댁)
-        dict["왕십리 삼성아파트"] = CreateLandmarkObject(landmarksRoot.transform, "왕십리 삼성아파트", "친할머니댁 👵👴", new Vector3(-65f, 0f, -65f), new Color(0.55f, 0.45f, 0.85f), fontAsset, false);
-
-        // 8. 하남 풍산 아이파크 (외할머니, 외할아버지 댁)
-        dict["하남 풍산 아이파크"] = CreateLandmarkObject(landmarksRoot.transform, "하남 풍산 아이파크", "외할머니댁 👵👴", new Vector3(65f, 0f, -65f), new Color(0.95f, 0.6f, 0.7f), fontAsset, false);
-
-        // 9. 에버랜드 (환상의 나라)
-        dict["에버랜드"] = CreateLandmarkObject(landmarksRoot.transform, "에버랜드", "환상의 놀이공원 🎡", new Vector3(-115f, 0f, 85f), new Color(0.98f, 0.35f, 0.25f), fontAsset, false);
-
-        // 10. 롯데월드 (모험의 나라)
-        dict["롯데월드"] = CreateLandmarkObject(landmarksRoot.transform, "롯데월드", "모험과 신비의 나라 🎠", new Vector3(115f, 0f, 85f), new Color(0.35f, 0.55f, 0.95f), fontAsset, false);
-
-        // 11. 김포공항 (국내선 공항)
-        dict["김포공항"] = CreateLandmarkObject(landmarksRoot.transform, "김포공항", "국내선 공항 ✈️", new Vector3(-115f, 0f, -85f), new Color(0.45f, 0.7f, 0.85f), fontAsset, false);
-
-        // 12. 인천공항 (국제선 공항 & 비행기 연출)
-        Landmark incheon = CreateLandmarkObject(landmarksRoot.transform, "인천공항", "국제선 공항 🛫", new Vector3(115f, 0f, -85f), new Color(0.25f, 0.6f, 0.95f), fontAsset, false);
-        dict["인천공항"] = incheon;
-
-        // 인천공항 상공 비행기 비행 루프 추가
-        SetupAirportAirplane(incheon.transform);
-
-        return dict;
-    }
-
-    private static Landmark CreateLandmarkObject(Transform parent, string title, string subtitle, Vector3 pos, Color themeColor, TMP_FontAsset fontAsset, bool isCharging)
-    {
-        GameObject lmObj = new GameObject($"Landmark_{title}");
-        lmObj.transform.SetParent(parent);
-        lmObj.transform.position = pos;
-
-        Landmark landmark = lmObj.AddComponent<Landmark>();
-        landmark.landmarkName = title;
-        landmark.subtitle = subtitle;
-        landmark.isEVChargingStation = isCharging;
-
-        // 1. 감지 트리거 콜라이더
-        SphereCollider trigger = lmObj.AddComponent<SphereCollider>();
-        trigger.isTrigger = true;
-        trigger.radius = 8.5f;
-
-        // 2. 랜드마크 건물 비주얼 스폰 (임포트된 건물 프리팹 탐색 및 폴백 큐브)
-        GameObject buildingVisual = TrySpawnBuildingPrefab(title, lmObj.transform, themeColor);
-        buildingVisual.transform.localPosition = Vector3.zero;
-
-        // 3. 3D 간판 플로팅 UI
-        GameObject signRoot = new GameObject("SignRoot");
-        signRoot.transform.SetParent(lmObj.transform);
-        signRoot.transform.localPosition = new Vector3(0, 7.5f, 0);
-        landmark.signRoot = signRoot.transform;
-
-        // 간판 배경 판
-        GameObject signBoard = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        signBoard.name = "SignBoard";
-        signBoard.transform.SetParent(signRoot.transform);
-        signBoard.transform.localPosition = Vector3.zero;
-        signBoard.transform.localScale = new Vector3(7.5f, 2.2f, 0.35f);
-        signBoard.GetComponent<MeshRenderer>().sharedMaterial = GetOrCreateMaterial($"Mat_Sign_{title}", themeColor);
-        UnityEngine.Object.DestroyImmediate(signBoard.GetComponent<Collider>());
-
-        // 간판 타이틀 TMP
-        GameObject titleObj = new GameObject("SignTitle");
-        titleObj.transform.SetParent(signRoot.transform);
-        titleObj.transform.localPosition = new Vector3(0, 0.35f, -0.2f);
-        TextMeshPro titleTMP = titleObj.AddComponent<TextMeshPro>();
-        titleTMP.text = title;
-        titleTMP.fontSize = 7f;
-        titleTMP.alignment = TextAlignmentOptions.Center;
-        titleTMP.color = Color.white;
-        titleTMP.fontStyle = FontStyles.Bold;
-        if (fontAsset != null) titleTMP.font = fontAsset;
-        landmark.signTitleTMP = titleTMP;
-
-        // 간판 서브타이틀 TMP
-        GameObject subObj = new GameObject("SignSubtitle");
-        subObj.transform.SetParent(signRoot.transform);
-        subObj.transform.localPosition = new Vector3(0, -0.45f, -0.2f);
-        TextMeshPro subTMP = subObj.AddComponent<TextMeshPro>();
-        subTMP.text = subtitle;
-        subTMP.fontSize = 4.5f;
-        subTMP.alignment = TextAlignmentOptions.Center;
-        subTMP.color = new Color(1f, 0.95f, 0.6f);
-        if (fontAsset != null) subTMP.font = fontAsset;
-        landmark.signSubtitleTMP = subTMP;
-
-        // 4. 도착 축하 파티클
-        GameObject particleObj = new GameObject("ArrivalCelebrationParticle");
-        particleObj.transform.SetParent(lmObj.transform);
-        particleObj.transform.localPosition = new Vector3(0, 1.5f, 0);
-        ParticleSystem ps = particleObj.AddComponent<ParticleSystem>();
-        var main = ps.main;
-        main.playOnAwake = false;
-        main.loop = false;
-        main.startLifetime = 1.6f;
-        main.startSpeed = 7f;
-        main.startSize = 0.5f;
-        main.startColor = isCharging ? new Color(0.2f, 0.9f, 1f) : new Color(1f, 0.85f, 0.2f);
-        var emission = ps.emission;
-        emission.SetBursts(new ParticleSystem.Burst[] { new ParticleSystem.Burst(0f, 35) });
-        var shape = ps.shape;
-        shape.shapeType = ParticleSystemShapeType.Sphere;
-        landmark.arrivalParticle = ps;
-
-        return landmark;
-    }
-
-    private static GameObject TrySpawnBuildingPrefab(string landmarkName, Transform parent, Color themeColor)
-    {
-        // 프로젝트 내 건물 프리팹 검색
-        string[] searchPatterns = {
-            "Assets/SimplePoly City - Low Poly Assets/Prefab/Buildings/*.prefab",
-            "Assets/ithappy/Cartoon_City_Free/Prefabs/Buildings/*.prefab"
-        };
-
-        foreach (var pattern in searchPatterns)
+        Font sourceFont = AssetDatabase.LoadAssetAtPath<Font>(FontsPath);
+        if (sourceFont != null)
         {
-            string dir = Path.GetDirectoryName(pattern);
-            if (Directory.Exists(dir))
+            try
             {
-                string[] files = Directory.GetFiles(dir, "*.prefab");
-                if (files.Length > 0)
+                fontAsset = TMP_FontAsset.CreateFontAsset(sourceFont);
+                if (fontAsset != null)
                 {
-                    // 일관된 시드로 랜드마크마다 다른 멋진 건물 배치
-                    int index = Mathf.Abs(landmarkName.GetHashCode()) % files.Length;
-                    GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(files[index]);
-                    if (prefab != null)
-                    {
-                        GameObject inst = (GameObject)PrefabUtility.InstantiatePrefab(prefab, parent);
-                        inst.transform.localScale = Vector3.one * 1.5f;
-                        return inst;
-                    }
+                    AssetDatabase.CreateAsset(fontAsset, FontAssetPath);
+                    EditorUtility.SetDirty(fontAsset);
+                    AssetDatabase.SaveAssets();
+                    return fontAsset;
                 }
             }
+            catch { }
         }
-
-        // 폴백: 세련된 파스텔 큐브 건물
-        GameObject fallback = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        fallback.transform.SetParent(parent);
-        fallback.transform.localScale = new Vector3(10f, 12f, 10f);
-        fallback.transform.localPosition = new Vector3(0, 6f, 0);
-        fallback.GetComponent<MeshRenderer>().sharedMaterial = GetOrCreateMaterial($"Mat_Bldg_{landmarkName}", themeColor);
-        return fallback;
+        return TMP_Settings.defaultFontAsset;
     }
 
-    private static void SetupAirportAirplane(Transform airportTransform)
+    private static void GenerateBusFaceTextures()
     {
-        GameObject airportAir = new GameObject("AirportAirplaneFlight");
-        airportAir.transform.SetParent(airportTransform);
-        airportAir.transform.localPosition = Vector3.zero;
+        // 텍스처 파일 확인
+        string normalPath = Path.Combine(BusFacesDir, "BusFace_Normal.png");
+        string winkPath = Path.Combine(BusFacesDir, "BusFace_Wink.png");
+        string chargingPath = Path.Combine(BusFacesDir, "BusFace_Charging.png");
 
-        AirportPlaneAnimation anim = airportAir.AddComponent<AirportPlaneAnimation>();
-
-        // 비행기 모델 생성 (단순 날개형 비행기)
-        GameObject planeObj = new GameObject("AirplaneModel");
-        planeObj.transform.SetParent(airportAir.transform);
-        planeObj.transform.localPosition = new Vector3(0, 15f, 0);
-
-        // 동체
-        GameObject fuselage = GameObject.CreatePrimitive(PrimitiveType.Capsule);
-        fuselage.transform.SetParent(planeObj.transform);
-        fuselage.transform.localScale = new Vector3(1.4f, 4f, 1.4f);
-        fuselage.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
-        fuselage.GetComponent<MeshRenderer>().sharedMaterial = GetOrCreateMaterial("Mat_AirplaneBody", Color.white);
-        UnityEngine.Object.DestroyImmediate(fuselage.GetComponent<Collider>());
-
-        // 날개
-        GameObject wing = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        wing.transform.SetParent(planeObj.transform);
-        wing.transform.localScale = new Vector3(8.5f, 0.2f, 1.8f);
-        wing.transform.localPosition = new Vector3(0, 0.1f, 0.4f);
-        wing.GetComponent<MeshRenderer>().sharedMaterial = GetOrCreateMaterial("Mat_AirplaneWing", new Color(0.2f, 0.5f, 0.95f));
-        UnityEngine.Object.DestroyImmediate(wing.GetComponent<Collider>());
-
-        anim.planeModel = planeObj.transform;
+        if (!File.Exists(normalPath) || !File.Exists(winkPath) || !File.Exists(chargingPath))
+        {
+            AssetDatabase.Refresh();
+        }
     }
 
-    #endregion
-
-    #region 꼬마버스 세팅
-
-    private static BusController SetupBus(GameObject parent, Vector3 spawnPos)
+    private static void EnsureFamilyMemberTextures()
     {
-        // 씬에 기존 버스가 있는지 확인
-        BusController existingBus = UnityEngine.Object.FindAnyObjectByType<BusController>();
-        if (existingBus != null)
+        string[] extraMembers = { "친할머니", "친할아버지", "외할머니", "외할아버지" };
+        foreach (var m in extraMembers)
         {
-            existingBus.transform.position = spawnPos;
-            return existingBus;
-        }
-
-        GameObject busObj = null;
-
-        // 1. 임포트된 버스 프리팹 검색
-        string[] busCandidates = {
-            "Assets/SimplePoly City - Low Poly Assets/Prefab/Vehicles/Vehicle with Static Wheels/Vehicle_Bus_color01.prefab",
-            "Assets/SimplePoly City - Low Poly Assets/Prefab/Vehicles/Vehicle with Static Wheels/Vehicle_Bus_color02.prefab",
-            "Assets/Vladislav Simakov/Street_Vehicles_Pack_Autobus_Tram/Prefabs/SmallAutobus_Mesh.prefab"
-        };
-
-        foreach (var path in busCandidates)
-        {
-            GameObject busPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(path);
-            if (busPrefab != null)
+            string path = Path.Combine(FamilyTexturesDir, m + ".png");
+            if (!File.Exists(path))
             {
-                busObj = (GameObject)PrefabUtility.InstantiatePrefab(busPrefab, parent.transform);
+                AssetDatabase.Refresh();
                 break;
             }
-        }
-
-        if (busObj == null)
-        {
-            // 폴백 버스 큐브
-            busObj = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            busObj.name = "CoCoLittleBus";
-            busObj.transform.SetParent(parent.transform);
-            busObj.transform.localScale = new Vector3(2.4f, 2.2f, 5.5f);
-            busObj.GetComponent<MeshRenderer>().sharedMaterial = GetOrCreateMaterial("Mat_BusBody", new Color(0.2f, 0.65f, 1.0f)); // 친근한 파란색 버스
-        }
-        else
-        {
-            busObj.name = "CoCoLittleBus";
-        }
-
-        busObj.transform.position = spawnPos + Vector3.up * 1.0f;
-        busObj.transform.rotation = Quaternion.identity;
-
-        // Rigidbody 설정
-        Rigidbody rb = busObj.GetComponent<Rigidbody>();
-        if (rb == null) rb = busObj.AddComponent<Rigidbody>();
-        rb.mass = 1200f;
-        rb.linearDamping = 0.5f;
-        rb.angularDamping = 1.0f;
-        rb.collisionDetectionMode = CollisionDetectionMode.Continuous;
-
-        // BoxCollider 설정
-        BoxCollider boxCol = busObj.GetComponent<BoxCollider>();
-        if (boxCol == null)
-        {
-            boxCol = busObj.AddComponent<BoxCollider>();
-            boxCol.size = new Vector3(2.4f, 2.2f, 5.5f);
-            boxCol.center = new Vector3(0, 1.1f, 0);
-        }
-
-        BusController busController = busObj.GetComponent<BusController>();
-        if (busController == null) busController = busObj.AddComponent<BusController>();
-
-        // 2. 전면 2.5D 표정 스티커/스프라이트 부착
-        GameObject faceObj = GameObject.CreatePrimitive(PrimitiveType.Quad);
-        faceObj.name = "BusFrontFace";
-        faceObj.transform.SetParent(busObj.transform);
-        faceObj.transform.localPosition = new Vector3(0f, 1.35f, 2.76f);
-        faceObj.transform.localRotation = Quaternion.identity;
-        faceObj.transform.localScale = new Vector3(1.8f, 1.2f, 1f);
-        UnityEngine.Object.DestroyImmediate(faceObj.GetComponent<Collider>());
-
-        Material faceMat = new Material(Shader.Find("Universal Render Pipeline/Unlit") ?? Shader.Find("Sprites/Default"));
-        Texture2D normalTex = AssetDatabase.LoadAssetAtPath<Texture2D>(Path.Combine(BusFacesDir, "BusFace_Normal.png"));
-        Texture2D winkTex = AssetDatabase.LoadAssetAtPath<Texture2D>(Path.Combine(BusFacesDir, "BusFace_Wink.png"));
-        Texture2D chargingTex = AssetDatabase.LoadAssetAtPath<Texture2D>(Path.Combine(BusFacesDir, "BusFace_Charging.png"));
-
-        faceMat.mainTexture = normalTex;
-        faceObj.GetComponent<MeshRenderer>().sharedMaterial = faceMat;
-
-        busController.faceRenderer = faceObj.GetComponent<MeshRenderer>();
-        busController.normalFaceTexture = normalTex;
-        busController.winkFaceTexture = winkTex;
-        busController.happyChargingFaceTexture = chargingTex;
-
-        // 3. 주행 먼지 및 경적 파티클
-        GameObject dustObj = new GameObject("DustParticle");
-        dustObj.transform.SetParent(busObj.transform);
-        dustObj.transform.localPosition = new Vector3(0, 0.2f, -2.6f);
-        ParticleSystem dustPS = dustObj.AddComponent<ParticleSystem>();
-        var dustMain = dustPS.main;
-        dustMain.playOnAwake = false;
-        dustMain.startSize = 0.6f;
-        dustMain.startLifetime = 0.8f;
-        dustMain.startColor = new Color(0.85f, 0.85f, 0.85f, 0.45f);
-        busController.dustParticle = dustPS;
-
-        GameObject hornObj = new GameObject("HornParticle");
-        hornObj.transform.SetParent(busObj.transform);
-        hornObj.transform.localPosition = new Vector3(0, 2.2f, 0);
-        ParticleSystem hornPS = hornObj.AddComponent<ParticleSystem>();
-        var hornMain = hornPS.main;
-        hornMain.playOnAwake = false;
-        hornMain.loop = false;
-        hornMain.startSize = 0.8f;
-        hornMain.startLifetime = 1.0f;
-        hornMain.startColor = new Color(1f, 0.4f, 0.7f);
-        busController.hornHeartParticle = hornPS;
-
-        return busController;
-    }
-
-    private static void SetupCamera(Transform busTarget)
-    {
-        Camera mainCam = Camera.main;
-        if (mainCam == null)
-        {
-            GameObject camObj = new GameObject("Main Camera");
-            mainCam = camObj.AddComponent<Camera>();
-            camObj.tag = "MainCamera";
-        }
-
-        SmoothCameraFollow follow = mainCam.GetComponent<SmoothCameraFollow>();
-        if (follow == null) follow = mainCam.gameObject.AddComponent<SmoothCameraFollow>();
-        follow.target = busTarget;
-        follow.offset = new Vector3(0f, 9.5f, -13.5f);
-    }
-
-    #endregion
-
-    #region 가족 승객 2.5D 빌보드 생성
-
-    private static void SetupFamilyPassengers(GameObject parent, Dictionary<string, Landmark> landmarks, TMP_FontAsset fontAsset)
-    {
-        GameObject passengersRoot = new GameObject("FamilyPassengers");
-        passengersRoot.transform.SetParent(parent.transform);
-
-        // 가족 승객 데이터 매핑 (PRD 기준)
-        var passengerConfigs = new[]
-        {
-            new { Name = "선율이", SpawnLM = "아이파크캐슬", DestLM = "나라유치원", TexFile = "선율.png" },
-            new { Name = "태율이", SpawnLM = "아이파크캐슬", DestLM = "코코어린이집", TexFile = "태율.jpg" },
-            new { Name = "엄마",   SpawnLM = "아이파크캐슬", DestLM = "하남 스타필드", TexFile = "엄마.png" },
-            new { Name = "아빠",   SpawnLM = "아이파크캐슬", DestLM = "글빛공원", TexFile = "아빠.png" },
-            new { Name = "친할머니", SpawnLM = "왕십리 삼성아파트", DestLM = "아이파크캐슬", TexFile = "친할머니.png" },
-            new { Name = "친할아버지", SpawnLM = "왕십리 삼성아파트", DestLM = "에버랜드", TexFile = "친할아버지.png" },
-            new { Name = "외할머니", SpawnLM = "하남 풍산 아이파크", DestLM = "롯데월드", TexFile = "외할머니.png" },
-            new { Name = "외할아버지", SpawnLM = "하남 풍산 아이파크", DestLM = "인천공항", TexFile = "외할아버지.png" }
-        };
-
-        int offsetCounter = 0;
-        foreach (var cfg in passengerConfigs)
-        {
-            if (!landmarks.ContainsKey(cfg.SpawnLM)) continue;
-
-            Vector3 spawnPos = landmarks[cfg.SpawnLM].transform.position + new Vector3((offsetCounter % 3) * 2.5f - 2.5f, 0f, 4.5f);
-            offsetCounter++;
-
-            CreatePassengerObject(passengersRoot.transform, cfg.Name, cfg.DestLM, cfg.TexFile, spawnPos, fontAsset);
-        }
-    }
-
-    private static void CreatePassengerObject(Transform parent, string name, string destination, string texFileName, Vector3 pos, TMP_FontAsset fontAsset)
-    {
-        GameObject pObj = new GameObject($"Passenger_{name}");
-        pObj.transform.SetParent(parent);
-        pObj.transform.position = pos;
-
-        Passenger passenger = pObj.AddComponent<Passenger>();
-        passenger.passengerName = name;
-        passenger.destinationLandmarkName = destination;
-
-        // 트리거 콜라이더
-        SphereCollider trigger = pObj.AddComponent<SphereCollider>();
-        trigger.isTrigger = true;
-        trigger.radius = 2.4f;
-
-        // Visual Root (2.5D 빌보드 회전용)
-        GameObject visualRoot = new GameObject("VisualRoot");
-        visualRoot.transform.SetParent(pObj.transform);
-        visualRoot.transform.localPosition = Vector3.zero;
-        passenger.visualRoot = visualRoot.transform;
-
-        // 초상화 Quad
-        GameObject portraitQuad = GameObject.CreatePrimitive(PrimitiveType.Quad);
-        portraitQuad.name = "PortraitQuad";
-        portraitQuad.transform.SetParent(visualRoot.transform);
-        portraitQuad.transform.localPosition = new Vector3(0, 1.2f, 0);
-        portraitQuad.transform.localScale = new Vector3(1.6f, 1.6f, 1f);
-        UnityEngine.Object.DestroyImmediate(portraitQuad.GetComponent<Collider>());
-
-        // 텍스처 연결
-        string texPath = Path.Combine(FamilyTexturesDir, texFileName);
-        Texture2D faceTex = AssetDatabase.LoadAssetAtPath<Texture2D>(texPath);
-        Material portraitMat = new Material(Shader.Find("Universal Render Pipeline/Unlit") ?? Shader.Find("Sprites/Default"));
-        if (faceTex != null)
-        {
-            portraitMat.mainTexture = faceTex;
-            passenger.faceTexture = faceTex;
-        }
-        portraitQuad.GetComponent<MeshRenderer>().sharedMaterial = portraitMat;
-        passenger.portraitRenderer = portraitQuad.GetComponent<MeshRenderer>();
-
-        // 머리 위 이름표 TMP
-        GameObject nameObj = new GameObject("NameTag");
-        nameObj.transform.SetParent(visualRoot.transform);
-        nameObj.transform.localPosition = new Vector3(0, 2.3f, 0);
-        TextMeshPro nameTMP = nameObj.AddComponent<TextMeshPro>();
-        nameTMP.text = $"{name}\n<size=70%><color=#FFE680>▶ {destination}</color></size>";
-        nameTMP.fontSize = 4.2f;
-        nameTMP.alignment = TextAlignmentOptions.Center;
-        nameTMP.color = Color.white;
-        nameTMP.fontStyle = FontStyles.Bold;
-        if (fontAsset != null) nameTMP.font = fontAsset;
-        passenger.nameTagText = nameTMP;
-
-        // 승객 발밑 반짝이 파티클
-        GameObject sparkleObj = new GameObject("SparkleParticle");
-        sparkleObj.transform.SetParent(visualRoot.transform);
-        sparkleObj.transform.localPosition = new Vector3(0, 0.2f, 0);
-        ParticleSystem ps = sparkleObj.AddComponent<ParticleSystem>();
-        var main = ps.main;
-        main.playOnAwake = true;
-        main.startSize = 0.35f;
-        main.startLifetime = 1.2f;
-        main.startColor = new Color(1f, 0.9f, 0.4f, 0.8f);
-        var emission = ps.emission;
-        emission.rateOverTime = 8f;
-        passenger.sparkleParticle = ps;
-    }
-
-    #endregion
-
-    #region 모바일 UI & 미니게임 팝업
-
-    private static void SetupUI(BusController bus, TMP_FontAsset fontAsset)
-    {
-        // 캔버스 생성
-        GameObject canvasObj = GameObject.Find("GameCanvas");
-        if (canvasObj == null)
-        {
-            canvasObj = new GameObject("GameCanvas");
-            Canvas canvas = canvasObj.AddComponent<Canvas>();
-            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-
-            CanvasScaler scaler = canvasObj.AddComponent<CanvasScaler>();
-            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            scaler.referenceResolution = new Vector2(2560, 1600); // 갤럭시 탭 S9 울트라 (16:10 해상도 최적화)
-            scaler.matchWidthOrHeight = 0.5f;
-
-            canvasObj.AddComponent<GraphicRaycaster>();
-        }
-
-        // EventSystem 확인 및 New Input System 모듈 연결
-        EventSystem es = UnityEngine.Object.FindAnyObjectByType<EventSystem>();
-        if (es == null)
-        {
-            GameObject esObj = new GameObject("EventSystem");
-            es = esObj.AddComponent<EventSystem>();
-        }
-
-        StandaloneInputModule oldMod = es.GetComponent<StandaloneInputModule>();
-        if (oldMod != null)
-        {
-            UnityEngine.Object.DestroyImmediate(oldMod);
-        }
-
-        Type newModType = Type.GetType("UnityEngine.InputSystem.UI.InputSystemUIInputModule, Unity.InputSystem");
-        if (newModType != null && es.GetComponent(newModType) == null)
-        {
-            es.gameObject.AddComponent(newModType);
-        }
-
-        GameHUD hud = canvasObj.GetComponent<GameHUD>() ?? canvasObj.AddComponent<GameHUD>();
-        MobileTouchControls controls = canvasObj.GetComponent<MobileTouchControls>() ?? canvasObj.AddComponent<MobileTouchControls>();
-
-        // 1. 상단 미션 안내 바
-        SetupTopMissionHUD(canvasObj.transform, hud, fontAsset);
-
-        // 2. 모바일 터치 페달 및 조향 버튼 (가속, 브레이크, 좌/우, 빵빵)
-        SetupMobileTouchHUD(canvasObj.transform, hud, controls, fontAsset);
-
-        // 3. 미니게임 퀴즈 모달 팝업
-        SetupMiniGameModal(canvasObj.transform, fontAsset);
-    }
-
-    private static void SetupTopMissionHUD(Transform canvasTransform, GameHUD hud, TMP_FontAsset fontAsset)
-    {
-        // 상단 컨테이너
-        GameObject topBar = new GameObject("TopMissionBar");
-        topBar.transform.SetParent(canvasTransform, false);
-        RectTransform rt = topBar.AddComponent<RectTransform>();
-        rt.anchorMin = new Vector2(0.1f, 0.88f);
-        rt.anchorMax = new Vector2(0.9f, 0.98f);
-        rt.offsetMin = rt.offsetMax = Vector2.zero;
-
-        Image bg = topBar.AddComponent<Image>();
-        bg.color = new Color(0.1f, 0.15f, 0.25f, 0.85f);
-
-        // 미션 텍스트
-        GameObject missionTextObj = new GameObject("MissionText");
-        missionTextObj.transform.SetParent(topBar.transform, false);
-        RectTransform textRT = missionTextObj.AddComponent<RectTransform>();
-        textRT.anchorMin = new Vector2(0.02f, 0.1f);
-        textRT.anchorMax = new Vector2(0.65f, 0.9f);
-        textRT.offsetMin = textRT.offsetMax = Vector2.zero;
-
-        TextMeshProUGUI missionTMP = missionTextObj.AddComponent<TextMeshProUGUI>();
-        missionTMP.text = "아이파크캐슬에서 선율이와 태율이를 태워주세요! 🚌";
-        missionTMP.fontSize = 42;
-        missionTMP.color = Color.white;
-        missionTMP.alignment = TextAlignmentOptions.MidlineLeft;
-        if (fontAsset != null) missionTMP.font = fontAsset;
-        hud.missionTextTMP = missionTMP;
-
-        // 배터리 잔량 & 속도 표시
-        GameObject statusObj = new GameObject("StatusGroup");
-        statusObj.transform.SetParent(topBar.transform, false);
-        RectTransform statusRT = statusObj.AddComponent<RectTransform>();
-        statusRT.anchorMin = new Vector2(0.68f, 0.1f);
-        statusRT.anchorMax = new Vector2(0.98f, 0.9f);
-        statusRT.offsetMin = statusRT.offsetMax = Vector2.zero;
-
-        TextMeshProUGUI statusTMP = statusObj.AddComponent<TextMeshProUGUI>();
-        statusTMP.text = "100% ⚡  |  0 km/h";
-        statusTMP.fontSize = 38;
-        statusTMP.color = new Color(0.4f, 1f, 0.5f);
-        statusTMP.alignment = TextAlignmentOptions.MidlineRight;
-        if (fontAsset != null) statusTMP.font = fontAsset;
-        hud.batteryTextTMP = statusTMP;
-
-        // 토스트 알림 패널
-        GameObject toast = new GameObject("ToastPanel");
-        toast.transform.SetParent(canvasTransform, false);
-        RectTransform toastRT = toast.AddComponent<RectTransform>();
-        toastRT.anchorMin = new Vector2(0.25f, 0.75f);
-        toastRT.anchorMax = new Vector2(0.75f, 0.84f);
-        toastRT.offsetMin = toastRT.offsetMax = Vector2.zero;
-
-        Image toastBG = toast.AddComponent<Image>();
-        toastBG.color = new Color(1f, 0.9f, 0.2f, 0.95f);
-
-        GameObject toastTextObj = new GameObject("ToastText");
-        toastTextObj.transform.SetParent(toast.transform, false);
-        RectTransform ttRT = toastTextObj.AddComponent<RectTransform>();
-        ttRT.anchorMin = Vector2.zero;
-        ttRT.anchorMax = Vector2.one;
-        ttRT.offsetMin = ttRT.offsetMax = Vector2.zero;
-
-        TextMeshProUGUI toastTMP = toastTextObj.AddComponent<TextMeshProUGUI>();
-        toastTMP.text = "선율이 탑승 완료!";
-        toastTMP.fontSize = 44;
-        toastTMP.color = new Color(0.15f, 0.15f, 0.15f);
-        toastTMP.alignment = TextAlignmentOptions.Center;
-        if (fontAsset != null) toastTMP.font = fontAsset;
-
-        hud.toastPanel = toast;
-        hud.toastTextTMP = toastTMP;
-        toast.SetActive(false);
-    }
-
-    private static void SetupMobileTouchHUD(Transform canvasTransform, GameHUD hud, MobileTouchControls controls, TMP_FontAsset fontAsset)
-    {
-        // 1. 좌측 조향 버튼 (좌/우)
-        CreateTouchButton(canvasTransform, "Btn_Left", "◀", new Vector2(0.04f, 0.05f), new Vector2(0.14f, 0.21f), new Color(0.3f, 0.65f, 1f, 0.8f), fontAsset,
-            controls.OnLeftDown, controls.OnLeftUp);
-
-        CreateTouchButton(canvasTransform, "Btn_Right", "▶", new Vector2(0.16f, 0.05f), new Vector2(0.26f, 0.21f), new Color(0.3f, 0.65f, 1f, 0.8f), fontAsset,
-            controls.OnRightDown, controls.OnRightUp);
-
-        // 2. 우측 페달 버튼 (가속 / 브레이크)
-        CreateTouchButton(canvasTransform, "Btn_Gas", "가속\n🚀", new Vector2(0.85f, 0.05f), new Vector2(0.96f, 0.24f), new Color(0.2f, 0.85f, 0.35f, 0.85f), fontAsset,
-            controls.OnGasDown, controls.OnGasUp);
-
-        CreateTouchButton(canvasTransform, "Btn_Brake", "정지\n🛑", new Vector2(0.72f, 0.05f), new Vector2(0.83f, 0.21f), new Color(1f, 0.35f, 0.35f, 0.85f), fontAsset,
-            controls.OnBrakeDown, controls.OnBrakeUp);
-
-        // 3. 중앙 하단 경적 버튼 ("빵빵! 📢")
-        GameObject hornObj = CreateTouchButton(canvasTransform, "Btn_Horn", "빵빵! 📢", new Vector2(0.44f, 0.04f), new Vector2(0.56f, 0.18f), new Color(1f, 0.75f, 0.15f, 0.9f), fontAsset,
-            controls.OnHornClicked, null);
-
-        hud.hornButton = hornObj.GetComponent<Button>();
-    }
-
-    private static GameObject CreateTouchButton(Transform parent, string name, string label, Vector2 anchorMin, Vector2 anchorMax, Color color, TMP_FontAsset fontAsset, Action onDown, Action onUp)
-    {
-        GameObject btnObj = new GameObject(name);
-        btnObj.transform.SetParent(parent, false);
-        RectTransform rt = btnObj.AddComponent<RectTransform>();
-        rt.anchorMin = anchorMin;
-        rt.anchorMax = anchorMax;
-        rt.offsetMin = rt.offsetMax = Vector2.zero;
-
-        Image img = btnObj.AddComponent<Image>();
-        img.color = color;
-
-        Button btn = btnObj.AddComponent<Button>();
-
-        // EventTrigger를 통한 누르고 있기 감지
-        EventTrigger trigger = btnObj.AddComponent<EventTrigger>();
-        if (onDown != null)
-        {
-            EventTrigger.Entry entryDown = new EventTrigger.Entry { eventID = EventTriggerType.PointerDown };
-            entryDown.callback.AddListener((data) => onDown.Invoke());
-            trigger.triggers.Add(entryDown);
-        }
-        if (onUp != null)
-        {
-            EventTrigger.Entry entryUp = new EventTrigger.Entry { eventID = EventTriggerType.PointerUp };
-            entryUp.callback.AddListener((data) => onUp.Invoke());
-            trigger.triggers.Add(entryUp);
-        }
-
-        // 라벨 텍스트
-        GameObject txtObj = new GameObject("Label");
-        txtObj.transform.SetParent(btnObj.transform, false);
-        RectTransform txtRT = txtObj.AddComponent<RectTransform>();
-        txtRT.anchorMin = Vector2.zero;
-        txtRT.anchorMax = Vector2.one;
-        txtRT.offsetMin = txtRT.offsetMax = Vector2.zero;
-
-        TextMeshProUGUI tmp = txtObj.AddComponent<TextMeshProUGUI>();
-        tmp.text = label;
-        tmp.fontSize = 40;
-        tmp.fontStyle = FontStyles.Bold;
-        tmp.alignment = TextAlignmentOptions.Center;
-        tmp.color = Color.white;
-        if (fontAsset != null) tmp.font = fontAsset;
-
-        return btnObj;
-    }
-
-    private static void SetupMiniGameModal(Transform canvasTransform, TMP_FontAsset fontAsset)
-    {
-        GameObject modalObj = new GameObject("MiniGameModal");
-        modalObj.transform.SetParent(canvasTransform, false);
-        RectTransform rt = modalObj.AddComponent<RectTransform>();
-        rt.anchorMin = Vector2.zero;
-        rt.anchorMax = Vector2.one;
-        rt.offsetMin = rt.offsetMax = Vector2.zero;
-
-        Image dimmer = modalObj.AddComponent<Image>();
-        dimmer.color = new Color(0f, 0f, 0f, 0.72f);
-
-        MiniGameUI miniGame = modalObj.AddComponent<MiniGameUI>();
-        miniGame.modalRoot = modalObj;
-
-        // 팝업 카드 컨테이너
-        GameObject cardBox = new GameObject("CardBox");
-        cardBox.transform.SetParent(modalObj.transform, false);
-        RectTransform boxRT = cardBox.AddComponent<RectTransform>();
-        boxRT.anchorMin = new Vector2(0.2f, 0.2f);
-        boxRT.anchorMax = new Vector2(0.8f, 0.8f);
-        boxRT.offsetMin = boxRT.offsetMax = Vector2.zero;
-
-        Image boxBG = cardBox.AddComponent<Image>();
-        boxBG.color = new Color(0.98f, 0.98f, 0.95f);
-
-        // 타이틀
-        GameObject titleObj = new GameObject("ModalTitle");
-        titleObj.transform.SetParent(cardBox.transform, false);
-        RectTransform tRT = titleObj.AddComponent<RectTransform>();
-        tRT.anchorMin = new Vector2(0.05f, 0.82f);
-        tRT.anchorMax = new Vector2(0.95f, 0.96f);
-        tRT.offsetMin = tRT.offsetMax = Vector2.zero;
-
-        TextMeshProUGUI titleTMP = titleObj.AddComponent<TextMeshProUGUI>();
-        titleTMP.text = "⭐ 신나는 도착 퀴즈! ⭐";
-        titleTMP.fontSize = 54;
-        titleTMP.color = new Color(0.2f, 0.2f, 0.35f);
-        titleTMP.alignment = TextAlignmentOptions.Center;
-        if (fontAsset != null) titleTMP.font = fontAsset;
-        miniGame.titleTMP = titleTMP;
-
-        // 질문 텍스트
-        GameObject qObj = new GameObject("ModalQuestion");
-        qObj.transform.SetParent(cardBox.transform, false);
-        RectTransform qRT = qObj.AddComponent<RectTransform>();
-        qRT.anchorMin = new Vector2(0.05f, 0.65f);
-        qRT.anchorMax = new Vector2(0.95f, 0.80f);
-        qRT.offsetMin = qRT.offsetMax = Vector2.zero;
-
-        TextMeshProUGUI qTMP = qObj.AddComponent<TextMeshProUGUI>();
-        qTMP.text = "어디에 도착했을까요? 알맞은 카드를 터치해 보세요!";
-        qTMP.fontSize = 42;
-        qTMP.color = new Color(0.3f, 0.35f, 0.45f);
-        qTMP.alignment = TextAlignmentOptions.Center;
-        if (fontAsset != null) qTMP.font = fontAsset;
-        miniGame.questionTMP = qTMP;
-
-        // 3개 선택 카드 버튼
-        Color[] cardColors = {
-            new Color(0.35f, 0.75f, 1f),
-            new Color(1f, 0.65f, 0.25f),
-            new Color(0.4f, 0.85f, 0.45f)
-        };
-
-        for (int i = 0; i < 3; i++)
-        {
-            float minX = 0.08f + i * 0.30f;
-            float maxX = minX + 0.24f;
-
-            GameObject card = new GameObject($"Card_{i}");
-            card.transform.SetParent(cardBox.transform, false);
-            RectTransform cRT = card.AddComponent<RectTransform>();
-            cRT.anchorMin = new Vector2(minX, 0.22f);
-            cRT.anchorMax = new Vector2(maxX, 0.58f);
-            cRT.offsetMin = cRT.offsetMax = Vector2.zero;
-
-            Image cImg = card.AddComponent<Image>();
-            cImg.color = cardColors[i];
-
-            Button cBtn = card.AddComponent<Button>();
-            miniGame.cardButtons.Add(cBtn);
-
-            GameObject cTxtObj = new GameObject("Text");
-            cTxtObj.transform.SetParent(card.transform, false);
-            RectTransform ctRT = cTxtObj.AddComponent<RectTransform>();
-            ctRT.anchorMin = Vector2.zero;
-            ctRT.anchorMax = Vector2.one;
-            ctRT.offsetMin = ctRT.offsetMax = Vector2.zero;
-
-            TextMeshProUGUI cTMP = cTxtObj.AddComponent<TextMeshProUGUI>();
-            cTMP.text = $"보기 {i + 1}";
-            cTMP.fontSize = 44;
-            cTMP.fontStyle = FontStyles.Bold;
-            cTMP.alignment = TextAlignmentOptions.Center;
-            cTMP.color = Color.white;
-            if (fontAsset != null) cTMP.font = fontAsset;
-            miniGame.cardTexts.Add(cTMP);
-        }
-
-        // 축하 텍스트
-        GameObject celObj = new GameObject("CelebrationText");
-        celObj.transform.SetParent(cardBox.transform, false);
-        RectTransform celRT = celObj.AddComponent<RectTransform>();
-        celRT.anchorMin = new Vector2(0.05f, 0.05f);
-        celRT.anchorMax = new Vector2(0.95f, 0.18f);
-        celRT.offsetMin = celRT.offsetMax = Vector2.zero;
-
-        TextMeshProUGUI celTMP = celObj.AddComponent<TextMeshProUGUI>();
-        celTMP.text = "🎉 정답이에요! 참 잘했어요! ⭐⭐⭐";
-        celTMP.fontSize = 46;
-        celTMP.color = new Color(0.95f, 0.25f, 0.4f);
-        celTMP.alignment = TextAlignmentOptions.Center;
-        if (fontAsset != null) celTMP.font = fontAsset;
-        miniGame.celebrationTMP = celTMP;
-        celObj.SetActive(false);
-
-        modalObj.SetActive(false);
-    }
-
-    #endregion
-
-    #region 매니저 설정
-
-    private static void SetupManagers(GameObject parent)
-    {
-        GameObject mgrObj = GameObject.Find("PassengerManager");
-        if (mgrObj == null)
-        {
-            mgrObj = new GameObject("PassengerManager");
-            mgrObj.transform.SetParent(parent.transform);
-        }
-
-        if (mgrObj.GetComponent<PassengerManager>() == null)
-        {
-            mgrObj.AddComponent<PassengerManager>();
         }
     }
 

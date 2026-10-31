@@ -11,11 +11,11 @@ public class BusController : MonoBehaviour
     public static BusController Instance { get; private set; }
 
     [Header("주행 세팅 (유아용 부드러운 아케이드 조작)")]
-    public float maxForwardSpeed = 16f;
-    public float maxReverseSpeed = 8f;
-    public float acceleration = 12f;
-    public float deceleration = 14f;
-    public float steerSpeed = 95f;
+    public float maxForwardSpeed = 22f;
+    public float maxReverseSpeed = 10f;
+    public float acceleration = 20f;
+    public float deceleration = 18f;
+    public float steerSpeed = 110f;
 
     [Header("배터리 시스템 (친환경 꼬마 전기버스)")]
     public float maxBattery = 100f;
